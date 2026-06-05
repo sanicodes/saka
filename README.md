@@ -53,19 +53,6 @@ shared/   constants.js  physics.js  factory.js  stadiums.js   # runs on both sid
 server/   index.js (bootstrap)  net.js (sockets+registry)  Room.js (game loop)
 client/   index.html  main.js  render.js  ui.js  sandbox.html
 ```
-
-## Tuning the feel
-
-Everything lives in `shared/constants.js` (`MOVE_ACCEL`, `KICK_STRENGTH`, damping,
-restitution, etc.). Edit, reload the sandbox, repeat — no logic changes needed.
-
-## Not yet done (v2 — see build spec §8)
-
-Client-side prediction + reconciliation, more stadiums / map editor, chat, recordings,
-and deployment to a long-running host (Fly/Railway/Render — **not** serverless; the
-loop must persist). Abuse caps (max rooms, players/room, create rate-limit, full
-server-side input validation) are already in place in `net.js` / `Room.js`.
-
 ## Controls
 
 Move `WASD` / arrows · Kick `Space` / `X` (edge-triggered — release and press again to
