@@ -12,9 +12,14 @@ import {
   BALL_BCOEFF,
   BALL_DAMP,
   MOVE_ACCEL,
+  SPRINT_ACCEL,
   KICK_ACCEL,
   KICK_RANGE,
   KICK_STRENGTH,
+  STAMINA_DRAIN,
+  STAMINA_EXHAUST_REENABLE,
+  STAMINA_MAX,
+  STAMINA_REGEN,
   CGROUP_BALL,
   CGROUP_PLAYER,
   CGROUP_POST,
@@ -62,11 +67,18 @@ export function makePlayer(x, y, team) {
     kind: 'player',
   });
   d.team = team; // 'red' | 'blue'
+  resetPlayerStamina(d);
   return d;
 }
 
+export function resetPlayerStamina(player) {
+  player.stamina = STAMINA_MAX;
+  player.exhausted = false;
+  player.isSprinting = false;
+}
+
 // Apply directional input acceleration to a player's velocity (before integrate).
-// `input` = { u, d, l, r, kick }. Slower accel while the kick key is held.
+// `input` = { u, d, l, r, kick, run }. Slower accel while the kick key is held.
 export function applyMoveInput(player, input) {
   let ix = (input.r ? 1 : 0) - (input.l ? 1 : 0);
   let iy = (input.d ? 1 : 0) - (input.u ? 1 : 0);
@@ -75,7 +87,23 @@ export function applyMoveInput(player, input) {
     ix /= len;
     iy /= len;
   }
-  const accel = input.kick ? KICK_ACCEL : MOVE_ACCEL;
+  if (player.stamina === undefined) resetPlayerStamina(player);
+
+  const wantsSprint = !!input.run && len > 0 && !input.kick;
+  const canSprint = wantsSprint && !player.exhausted && player.stamina > 0;
+  player.isSprinting = canSprint;
+
+  if (canSprint) {
+    player.stamina = Math.max(0, player.stamina - STAMINA_DRAIN);
+    if (player.stamina <= 0) player.exhausted = true;
+  } else {
+    player.stamina = Math.min(STAMINA_MAX, player.stamina + STAMINA_REGEN);
+    if (player.exhausted && player.stamina >= STAMINA_EXHAUST_REENABLE) {
+      player.exhausted = false;
+    }
+  }
+
+  const accel = input.kick ? KICK_ACCEL : canSprint ? SPRINT_ACCEL : MOVE_ACCEL;
   player.vx += ix * accel;
   player.vy += iy * accel;
 }

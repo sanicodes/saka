@@ -10,6 +10,7 @@ import {
   makePosts,
   makePlayer,
   applyMoveInput,
+  resetPlayerStamina,
   tryKick,
 } from '../shared/factory.js';
 import { clamp } from '../shared/physics.js';
@@ -25,6 +26,7 @@ import {
   CGROUP_BALL,
   KICKOFF_START_SPEED,
   KICKOFF_KEEPOUT_RADIUS,
+  STAMINA_MAX,
 } from '../shared/constants.js';
 
 const TICK_HZ = 60;
@@ -121,7 +123,7 @@ export class Room {
       id: socketId,
       name: (name || 'Player').slice(0, 16),
       team: 'spec', // default: spectator — players explicitly pick a side
-      input: { u: false, d: false, l: false, r: false },
+      input: { u: false, d: false, l: false, r: false, run: false },
       kickHeld: false,
       pendingKick: false,
       disc: null,
@@ -149,7 +151,7 @@ export class Room {
   setInput(socketId, input) {
     const p = this.players.get(socketId);
     if (!p) return;
-    p.input = { u: !!input.u, d: !!input.d, l: !!input.l, r: !!input.r };
+    p.input = { u: !!input.u, d: !!input.d, l: !!input.l, r: !!input.r, run: !!input.run };
     const kick = !!input.kick;
     if (kick && !p.kickHeld) p.pendingKick = true; // rising edge
     p.kickHeld = kick;
@@ -182,6 +184,7 @@ export class Room {
     player.disc.y = y;
     player.disc.vx = 0;
     player.disc.vy = 0;
+    resetPlayerStamina(player.disc);
   }
 
   // ---------------------------------------------------------------- owner actions
@@ -501,6 +504,10 @@ export class Room {
         y: Math.round(d.y),
         vx: Math.round(d.vx * 100),
         vy: Math.round(d.vy * 100),
+        stamina:
+          d.kind === 'player' ? Math.round(((d.stamina ?? STAMINA_MAX) / STAMINA_MAX) * 100) : null,
+        exhausted: d.kind === 'player' ? !!d.exhausted : false,
+        sprinting: d.kind === 'player' ? !!d.isSprinting : false,
       })),
       score: [this.score.red, this.score.blue],
       state: this.state,

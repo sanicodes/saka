@@ -52,7 +52,15 @@ export class Renderer {
 
   pushSnapshot(snap) {
     const byId = new Map();
-    for (const d of snap.discs) byId.set(d.id, { x: d.x, y: d.y });
+    for (const d of snap.discs) {
+      byId.set(d.id, {
+        x: d.x,
+        y: d.y,
+        stamina: d.stamina,
+        exhausted: !!d.exhausted,
+        sprinting: !!d.sprinting,
+      });
+    }
     this.buffer.push({ recvTime: performance.now(), byId });
     if (this.buffer.length > BUFFER_MAX) this.buffer.shift();
   }
@@ -85,8 +93,18 @@ export class Renderer {
     const out = new Map();
     for (const [id, pb] of b.byId) {
       const pa = a.byId.get(id);
-      if (pa) out.set(id, { x: pa.x + (pb.x - pa.x) * f, y: pa.y + (pb.y - pa.y) * f });
-      else out.set(id, pb);
+      if (pa) {
+        out.set(id, {
+          x: pa.x + (pb.x - pa.x) * f,
+          y: pa.y + (pb.y - pa.y) * f,
+          stamina:
+            typeof pa.stamina === 'number' && typeof pb.stamina === 'number'
+              ? pa.stamina + (pb.stamina - pa.stamina) * f
+              : pb.stamina,
+          exhausted: pb.exhausted,
+          sprinting: pb.sprinting,
+        });
+      } else out.set(id, pb);
     }
     return out;
   }
@@ -174,6 +192,27 @@ export class Renderer {
       ctx.strokeStyle = `rgba(255,245,170,${0.85 * kickFlash})`;
       ctx.stroke();
     }
+    if (isSelf && s.kind === 'player') this._drawStamina(p, s);
+  }
+
+  _drawStamina(p, s) {
+    if (typeof p.stamina !== 'number') return;
+    const { ctx } = this;
+    const pct = Math.max(0, Math.min(1, p.stamina / 100));
+    const w = 38;
+    const h = 5;
+    const x = p.x - w / 2;
+    const y = p.y + s.radius + 7;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,.55)';
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = 'rgba(255,255,255,.38)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    ctx.fillStyle = p.exhausted ? '#f06d5f' : p.sprinting ? '#f4d35e' : '#7ed982';
+    ctx.fillRect(x + 1, y + 1, Math.max(0, (w - 2) * pct), h - 2);
+    ctx.restore();
   }
 
   _kickFlashAmount(id, now) {

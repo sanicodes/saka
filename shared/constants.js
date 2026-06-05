@@ -17,9 +17,16 @@ export const BALL_DAMP = 0.99;
 
 // --- Movement & kick ---
 export const MOVE_ACCEL = 0.12;
+export const SPRINT_ACCEL = 0.18;
 export const KICK_ACCEL = 0.07; // slower while charging a kick
 export const KICK_RANGE = 4; // gap (px) within which a kick connects
 export const KICK_STRENGTH = 5.0;
+
+// --- Stamina ---
+export const STAMINA_MAX = 100;
+export const STAMINA_DRAIN = 0.45; // per tick while sprinting
+export const STAMINA_REGEN = 0.22; // per tick while not sprinting
+export const STAMINA_EXHAUST_REENABLE = 25;
 
 // --- Walls ---
 export const WALL_BCOEFF = 1.0; // perimeter walls are bouncy

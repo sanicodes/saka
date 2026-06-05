@@ -16,7 +16,7 @@
 <div class="wrap">
   <h2 style="margin:4px">Physics Sandbox <span style="opacity:.5;font-size:14px">(no network — tune the feel)</span></h2>
   <canvas id="c" width="1200" height="600"></canvas>
-  <div class="hint">Move: <code>WASD</code> / arrows &nbsp;•&nbsp; Kick: <code>Space</code> / <code>X</code> (release &amp; press to kick again) &nbsp;•&nbsp; Reset: <code>R</code></div>
+  <div class="hint">Move: <code>WASD</code> / arrows &nbsp;•&nbsp; Sprint: <code>Shift</code> &nbsp;•&nbsp; Kick: <code>Space</code> / <code>X</code> (release &amp; press to kick again) &nbsp;•&nbsp; Reset: <code>R</code></div>
 </div>
 
 <script type="module">
@@ -43,6 +43,7 @@ const keys = {};
 let kickHeld = false;        // is the kick key currently down
 let kickPressedThisTick = false; // edge: went up->down since last tick
 const KICK_KEYS = ['Space', 'KeyX'];
+const RUN_KEYS = ['ShiftLeft', 'ShiftRight'];
 const MOVE = {
   up: ['KeyW', 'ArrowUp'], down: ['KeyS', 'ArrowDown'],
   left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'],
@@ -56,7 +57,9 @@ addEventListener('keydown', (e) => {
     kickHeld = true;
     e.preventDefault();
   }
-  if ([...MOVE.up, ...MOVE.down, ...MOVE.left, ...MOVE.right].includes(e.code)) e.preventDefault();
+  if ([...MOVE.up, ...MOVE.down, ...MOVE.left, ...MOVE.right, ...RUN_KEYS].includes(e.code)) {
+    e.preventDefault();
+  }
   keys[e.code] = true;
 });
 addEventListener('keyup', (e) => {
@@ -81,6 +84,7 @@ function tick() {
   const input = {
     u: anyDown(MOVE.up), d: anyDown(MOVE.down),
     l: anyDown(MOVE.left), r: anyDown(MOVE.right),
+    run: anyDown(RUN_KEYS),
     kick: kickHeld,
   };
   applyMoveInput(player, input);
@@ -96,6 +100,7 @@ function render() {
   for (const p of posts) drawDisc(p, '#dddddd');
   drawDisc(ball, '#ffffff', '#222');
   drawDisc(player, '#e15a4a', '#7a2b22');
+  drawStamina(player);
 }
 function drawField() {
   ctx.strokeStyle = 'rgba(255,255,255,.35)';
@@ -121,6 +126,20 @@ function drawDisc(d, fill, stroke) {
   ctx.fillStyle = fill;
   ctx.fill();
   if (stroke) { ctx.lineWidth = 2; ctx.strokeStyle = stroke; ctx.stroke(); }
+}
+function drawStamina(d) {
+  const pct = Math.max(0, Math.min(1, d.stamina / 100));
+  const w = 38;
+  const h = 5;
+  const x = d.x - w / 2;
+  const y = d.y + d.radius + 7;
+  ctx.fillStyle = 'rgba(0,0,0,.55)';
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = 'rgba(255,255,255,.38)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  ctx.fillStyle = d.exhausted ? '#f06d5f' : d.isSprinting ? '#f4d35e' : '#7ed982';
+  ctx.fillRect(x + 1, y + 1, Math.max(0, (w - 2) * pct), h - 2);
 }
 requestAnimationFrame(frame);
 </script>

@@ -25,11 +25,12 @@ starts the match. `PORT` env var overrides the port.
    if they leave) sets **time limit**, **score limit**, and **stadium**, then **Start
    match** (needs ≥1 player on each team). Non-hosts wait.
 4. **Match** — play to the score/time limit. Player **names ride on the discs** and a
-   **roster panel** beside the pitch lists each team. After a goal, the **scoring team is
-   locked out of the ball** at kickoff — the round only goes live once the conceding team
-   takes the kick. At full time a **winner overlay** shows the result, then the room
-   **auto-returns to the room lobby** after a few seconds. The host can **Play again**
-   (same teams) to skip the wait.
+   **roster panel** beside the pitch lists each team. Players can **sprint with stamina**
+   for short bursts; your stamina bar appears under your disc. After a goal, the
+   **scoring team is locked out of the ball** at kickoff — the round only goes live once
+   the conceding team takes the kick. At full time a **winner overlay** shows the result,
+   then the room **auto-returns to the room lobby** after a few seconds. The host can
+   **Play again** (same teams) to skip the wait.
 
 ## What's built 
 
@@ -44,7 +45,8 @@ starts the match. `PORT` env var overrides the port.
   team picking + spectators, optional room passwords, auto-return to the room lobby
   after a match, and global lobby with create/join + room lifecycle.
 - **Client** (`client/`) — canvas renderer with entity interpolation (renders ~100 ms
-  in the past), input capture (sent only on change), lobby UI, scoreboard, team picker.
+  in the past), stamina feedback, input capture (sent only on change), lobby UI,
+  scoreboard, team picker.
 
 ## Layout
 
@@ -55,6 +57,6 @@ client/   index.html  main.js  render.js  ui.js  sandbox.html
 ```
 ## Controls
 
-Move `WASD` / arrows · Kick `Space` / `X` (edge-triggered — release and press again to
-kick). `R` resets the sandbox.
+Move `WASD` / arrows · Sprint `Shift` · Kick `Space` / `X` (edge-triggered — release
+and press again to kick). `R` resets the sandbox.
 # saka
