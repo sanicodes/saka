@@ -95,11 +95,12 @@ export const ui = {
       handlers.onSetting({ stadiumKey: v })
     );
 
-    const active = room.players.filter((p) => p.team !== 'spec').length;
+    const ready =
+      room.players.some((p) => p.team === 'red') && room.players.some((p) => p.team === 'blue');
     $('startBtn').classList.toggle('hidden', !isOwner);
-    $('startBtn').disabled = active < 1;
+    $('startBtn').disabled = !ready;
     if (isOwner) {
-      $('rlWait').textContent = active < 1 ? 'Put at least one player on a team to start.' : '';
+      $('rlWait').textContent = ready ? '' : 'Put at least one player on each team to start.';
     } else {
       $('rlWait').textContent = 'Waiting for the host to start the match…';
     }

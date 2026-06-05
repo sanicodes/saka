@@ -13,6 +13,7 @@ const COLORS = {
   line: 'rgba(255,255,255,.35)',
 };
 const BUFFER_MAX = 30;
+const KICK_FLASH_MS = 240;
 
 export class Renderer {
   constructor(canvas) {
@@ -25,6 +26,7 @@ export class Renderer {
     this.buffer = []; // [{recvTime, byId:Map id->{x,y}}]
     this.phase = null; // current room state
     this.kickoffTeam = null; // team taking the kickoff (post-goal); null otherwise
+    this.kickFlashById = new Map(); // discId -> performance.now()
   }
 
   setPhase(state, kickoffTeam) {
@@ -36,6 +38,7 @@ export class Renderer {
     this.init = init;
     this.staticById.clear();
     for (const d of init.discs) this.staticById.set(d.id, d);
+    this.kickFlashById.clear();
     this.nameByDisc.clear();
     for (const p of init.players || []) this.nameByDisc.set(p.discId, p.name);
     // resize canvas to stadium
@@ -52,6 +55,10 @@ export class Renderer {
     for (const d of snap.discs) byId.set(d.id, { x: d.x, y: d.y });
     this.buffer.push({ recvTime: performance.now(), byId });
     if (this.buffer.length > BUFFER_MAX) this.buffer.shift();
+  }
+
+  flashKick(discId) {
+    this.kickFlashById.set(discId, performance.now());
   }
 
   // positions for `renderTime`, interpolated between surrounding snapshots
@@ -98,6 +105,7 @@ export class Renderer {
     if (this.phase === 'kickoff' && this.kickoffTeam) this._drawKeepOut(positions);
 
     // posts first, then ball, then players (players on top)
+    const now = performance.now();
     const order = { post: 0, ball: 1, player: 2 };
     const ids = [...positions.keys()].sort(
       (i, j) => (order[this.staticById.get(i)?.kind] ?? 1) - (order[this.staticById.get(j)?.kind] ?? 1)
@@ -106,7 +114,7 @@ export class Renderer {
       const s = this.staticById.get(id);
       const p = positions.get(id);
       if (!s) continue;
-      this._drawDisc(p, s, id === this.selfDiscId);
+      this._drawDisc(p, s, id === this.selfDiscId, id, now);
     }
     // names go on top of all discs so they're never overlapped
     for (const id of ids) {
@@ -137,7 +145,7 @@ export class Renderer {
     ctx.stroke();
   }
 
-  _drawDisc(p, s, isSelf) {
+  _drawDisc(p, s, isSelf, id, now) {
     const { ctx } = this;
     let fill = COLORS.post,
       stroke = null;
@@ -148,6 +156,8 @@ export class Renderer {
       fill = s.team === 'blue' ? COLORS.blue : COLORS.red;
       stroke = isSelf ? '#fff' : 'rgba(0,0,0,.45)';
     }
+    const kickFlash = s.kind === 'player' ? this._kickFlashAmount(id, now) : 0;
+    if (kickFlash > 0) this._drawKickFlash(p, s, kickFlash);
     ctx.beginPath();
     ctx.arc(p.x, p.y, s.radius, 0, Math.PI * 2);
     ctx.fillStyle = fill;
@@ -157,6 +167,37 @@ export class Renderer {
       ctx.strokeStyle = stroke;
       ctx.stroke();
     }
+    if (kickFlash > 0) {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, s.radius + 2, 0, Math.PI * 2);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = `rgba(255,245,170,${0.85 * kickFlash})`;
+      ctx.stroke();
+    }
+  }
+
+  _kickFlashAmount(id, now) {
+    const started = this.kickFlashById.get(id);
+    if (started === undefined) return 0;
+    const age = now - started;
+    if (age >= KICK_FLASH_MS) {
+      this.kickFlashById.delete(id);
+      return 0;
+    }
+    return 1 - age / KICK_FLASH_MS;
+  }
+
+  _drawKickFlash(p, s, amount) {
+    const { ctx } = this;
+    ctx.save();
+    ctx.globalAlpha = 0.38 * amount;
+    ctx.shadowColor = 'rgba(255,245,170,.95)';
+    ctx.shadowBlur = 18 * amount;
+    ctx.fillStyle = '#fff5aa';
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, s.radius + 9 * amount, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
   }
 
   _drawKeepOut(positions) {

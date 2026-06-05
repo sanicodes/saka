@@ -89,10 +89,30 @@ export class Room {
   isOwner(socketId) {
     return this.ownerId === socketId;
   }
-  _activeCount() {
-    let n = 0;
-    for (const p of this.players.values()) if (p.team !== 'spec') n++;
-    return n;
+  _teamCounts() {
+    const counts = { red: 0, blue: 0 };
+    for (const p of this.players.values()) {
+      if (p.team === 'red' || p.team === 'blue') counts[p.team]++;
+    }
+    return counts;
+  }
+
+  _endIfTeamForfeit() {
+    if (!this._isLive()) return false;
+    const counts = this._teamCounts();
+    if (counts.red > 0 && counts.blue === 0) {
+      this._endMatch('red');
+      return true;
+    }
+    if (counts.blue > 0 && counts.red === 0) {
+      this._endMatch('blue');
+      return true;
+    }
+    if (counts.red === 0 && counts.blue === 0) {
+      this._endMatch();
+      return true;
+    }
+    return false;
   }
 
   // ---------------------------------------------------------------- players
@@ -121,6 +141,7 @@ export class Room {
       return;
     }
     if (wasOwner) this.ownerId = this.players.keys().next().value; // earliest joiner
+    if (this._endIfTeamForfeit()) return;
     this.sendRoom();
     if (this._isLive()) this.sendInit(); // disc set may have changed mid-match
   }
@@ -141,6 +162,7 @@ export class Room {
     if (team === 'spec') p.disc = null;
     else this._placePlayer(p);
     if (this.state === 'kickoff') this._applyKickoffMasks(); // keep the lock consistent
+    if (this._endIfTeamForfeit()) return;
     this.sendRoom();
     if (this._isLive()) this.sendInit();
   }
@@ -191,7 +213,8 @@ export class Room {
 
   startMatch(socketId) {
     if (!this.isOwner(socketId) || this.state !== 'lobby') return;
-    if (this._activeCount() < 1) return; // need at least one player on a team
+    const counts = this._teamCounts();
+    if (counts.red < 1 || counts.blue < 1) return; // need one player on each side
     this.score = { red: 0, blue: 0 };
     this.elapsedMs = 0;
     this.lastScorer = null;
@@ -253,7 +276,10 @@ export class Room {
         const canKick =
           this.state === 'play' ||
           (this.state === 'kickoff' && p.team !== this.kickoffLockTeam);
-        if (canKick) tryKick(p.disc, this.ball, true);
+        if (canKick) {
+          this.broadcastKick(p.disc.id);
+          tryKick(p.disc, this.ball, true);
+        }
         p.pendingKick = false;
       }
     }
@@ -379,9 +405,16 @@ export class Room {
     this.stateTicks = msToTicks(GOAL_CELEBRATION_MS);
     this.broadcastState();
   }
-  _endMatch() {
+  _endMatch(winner = null) {
+    if (winner) {
+      const loser = winner === 'red' ? 'blue' : 'red';
+      this.score[winner] = Math.max(this.score[winner], this.score[loser] + 1);
+      this.lastScorer = winner;
+    }
     this.state = 'ended';
+    this.kickoffLockTeam = null;
     this.stop();
+    this.sendRoom();
     this.broadcastState();
     // show the winner overlay, then automatically return everyone to the room lobby
     this.endTimer = setTimeout(() => {
@@ -454,6 +487,9 @@ export class Room {
       kickoffTeam: this.kickoffLockTeam ? (this.kickoffLockTeam === 'red' ? 'blue' : 'red') : null,
       timeLeftMs: this.timeLeftMs(),
     });
+  }
+  broadcastKick(discId) {
+    this.io.to(this.id).emit('kick', { discId });
   }
 
   snapshot() {

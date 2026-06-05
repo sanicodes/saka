@@ -23,7 +23,7 @@ starts the match. `PORT` env var overrides the port.
 3. **Room lobby** — Red / Spectators / Blue columns. Everyone joins as a spectator and
    clicks **Join Red / Join Blue / Spectate**. The **host** (★, first player; reassigned
    if they leave) sets **time limit**, **score limit**, and **stadium**, then **Start
-   match** (needs ≥1 player on a team). Non-hosts wait.
+   match** (needs ≥1 player on each team). Non-hosts wait.
 4. **Match** — play to the score/time limit. Player **names ride on the discs** and a
    **roster panel** beside the pitch lists each team. After a goal, the **scoring team is
    locked out of the ball** at kickoff — the round only goes live once the conceding team
@@ -31,11 +31,11 @@ starts the match. `PORT` env var overrides the port.
    **auto-returns to the room lobby** after a few seconds. The host can **Play again**
    (same teams) to skip the wait.
 
-## What's built (v1, milestones 1–6)
+## What's built 
 
 - **Shared physics** (`shared/`) — `Disc` model, disc/disc + disc/wall collisions,
-  fixed-step integration, classic stadium with goal pockets. Runs identically on the
-  server and in the offline sandbox (no drift).
+  fixed-step integration, and selectable stadiums with goal pockets. Runs identically
+  on the server and in the offline sandbox (no drift).
 - **Offline sandbox** — `http://localhost:3000/sandbox.html`. One player + ball + the
   full pitch, no network. Use it to tune the feel in `shared/constants.js`.
 - **Server** (`server/`) — Socket.IO, per-room 60 Hz loop (runs only while a match is

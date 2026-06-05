@@ -161,6 +161,10 @@ socket.on('snapshot', (snap) => {
   ui.setClock(snap.timeLeftMs);
 });
 
+socket.on('kick', ({ discId }) => {
+  renderer.flashKick(discId);
+});
+
 socket.on('state', (s) => {
   ui.setScore(s.score.red, s.score.blue);
   ui.setClock(s.timeLeftMs);

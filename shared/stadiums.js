@@ -78,8 +78,163 @@ function classicPitch() {
   };
 }
 
+// Pillars pitch: same broad scale as Classic, but with tighter goals, corner
+// bumpers, and two midfield posts that make rebounds less predictable.
+function pillarsPitch() {
+  const W = 1200,
+    H = 600;
+  const L = 60,
+    R = 1140,
+    T = 50,
+    B = 550;
+  const gT = 220,
+    gB = 380;
+  const netL = 20,
+    netR = 1180;
+  const cX = W / 2,
+    cY = H / 2;
+
+  return {
+    name: 'Pillars',
+    width: W,
+    height: H,
+    spawnRed: [
+      [280, cY],
+      [280, 210],
+      [280, 390],
+      [420, 245],
+      [420, 355],
+      [190, cY],
+    ],
+    spawnBlue: [
+      [920, cY],
+      [920, 210],
+      [920, 390],
+      [780, 245],
+      [780, 355],
+      [1010, cY],
+    ],
+    ballSpawn: [cX, cY],
+    segments: [
+      // perimeter with side goal openings
+      { ax: L, ay: T, bx: R, by: T, bCoeff: WALL_BCOEFF },
+      { ax: L, ay: B, bx: R, by: B, bCoeff: WALL_BCOEFF },
+      { ax: L, ay: T, bx: L, by: gT, bCoeff: WALL_BCOEFF },
+      { ax: L, ay: gB, bx: L, by: B, bCoeff: WALL_BCOEFF },
+      { ax: R, ay: T, bx: R, by: gT, bCoeff: WALL_BCOEFF },
+      { ax: R, ay: gB, bx: R, by: B, bCoeff: WALL_BCOEFF },
+      // net pockets
+      { ax: netL, ay: gT, bx: netL, by: gB, bCoeff: NET },
+      { ax: netL, ay: gT, bx: L, by: gT, bCoeff: NET },
+      { ax: netL, ay: gB, bx: L, by: gB, bCoeff: NET },
+      { ax: netR, ay: gT, bx: netR, by: gB, bCoeff: NET },
+      { ax: netR, ay: gT, bx: R, by: gT, bCoeff: NET },
+      { ax: netR, ay: gB, bx: R, by: gB, bCoeff: NET },
+      // diagonal corner bumpers
+      { ax: L + 90, ay: T, bx: L, by: T + 90, bCoeff: WALL_BCOEFF },
+      { ax: R - 90, ay: T, bx: R, by: T + 90, bCoeff: WALL_BCOEFF },
+      { ax: L, ay: B - 90, bx: L + 90, by: B, bCoeff: WALL_BCOEFF },
+      { ax: R, ay: B - 90, bx: R - 90, by: B, bCoeff: WALL_BCOEFF },
+    ],
+    posts: [
+      { x: L, y: gT, radius: 8 },
+      { x: L, y: gB, radius: 8 },
+      { x: R, y: gT, radius: 8 },
+      { x: R, y: gB, radius: 8 },
+      { x: cX, y: cY - 110, radius: 14 },
+      { x: cX, y: cY + 110, radius: 14 },
+    ],
+    goals: [
+      { scorer: 'blue', side: 'left', x: L - 2, yTop: gT, yBottom: gB },
+      { scorer: 'red', side: 'right', x: R + 2, yTop: gT, yBottom: gB },
+    ],
+  };
+}
+
+// Diamond pitch: open goals and standard width, with a compact midfield diamond
+// that creates bounce angles without blocking the first kickoff.
+function diamondPitch() {
+  const W = 1200,
+    H = 600;
+  const L = 50,
+    R = 1150,
+    T = 45,
+    B = 555;
+  const gT = 205,
+    gB = 395;
+  const netL = 15,
+    netR = 1185;
+  const cX = W / 2,
+    cY = H / 2;
+
+  return {
+    name: 'Diamond',
+    width: W,
+    height: H,
+    spawnRed: [
+      [260, cY],
+      [305, 215],
+      [305, 385],
+      [430, 260],
+      [430, 340],
+      [170, cY],
+    ],
+    spawnBlue: [
+      [940, cY],
+      [895, 215],
+      [895, 385],
+      [770, 260],
+      [770, 340],
+      [1030, cY],
+    ],
+    ballSpawn: [cX, cY],
+    segments: [
+      // perimeter with side goal openings
+      { ax: L, ay: T, bx: R, by: T, bCoeff: WALL_BCOEFF },
+      { ax: L, ay: B, bx: R, by: B, bCoeff: WALL_BCOEFF },
+      { ax: L, ay: T, bx: L, by: gT, bCoeff: WALL_BCOEFF },
+      { ax: L, ay: gB, bx: L, by: B, bCoeff: WALL_BCOEFF },
+      { ax: R, ay: T, bx: R, by: gT, bCoeff: WALL_BCOEFF },
+      { ax: R, ay: gB, bx: R, by: B, bCoeff: WALL_BCOEFF },
+      // net pockets
+      { ax: netL, ay: gT, bx: netL, by: gB, bCoeff: NET },
+      { ax: netL, ay: gT, bx: L, by: gT, bCoeff: NET },
+      { ax: netL, ay: gB, bx: L, by: gB, bCoeff: NET },
+      { ax: netR, ay: gT, bx: netR, by: gB, bCoeff: NET },
+      { ax: netR, ay: gT, bx: R, by: gT, bCoeff: NET },
+      { ax: netR, ay: gB, bx: R, by: gB, bCoeff: NET },
+      // midfield diamond rails
+      { ax: cX - 105, ay: cY - 105, bx: cX - 42, by: cY - 42, bCoeff: WALL_BCOEFF },
+      { ax: cX + 105, ay: cY - 105, bx: cX + 42, by: cY - 42, bCoeff: WALL_BCOEFF },
+      { ax: cX - 105, ay: cY + 105, bx: cX - 42, by: cY + 42, bCoeff: WALL_BCOEFF },
+      { ax: cX + 105, ay: cY + 105, bx: cX + 42, by: cY + 42, bCoeff: WALL_BCOEFF },
+      // shallow goal-lane deflectors
+      { ax: L + 120, ay: gT - 70, bx: L + 40, by: gT - 12, bCoeff: WALL_BCOEFF },
+      { ax: L + 40, ay: gB + 12, bx: L + 120, by: gB + 70, bCoeff: WALL_BCOEFF },
+      { ax: R - 120, ay: gT - 70, bx: R - 40, by: gT - 12, bCoeff: WALL_BCOEFF },
+      { ax: R - 40, ay: gB + 12, bx: R - 120, by: gB + 70, bCoeff: WALL_BCOEFF },
+    ],
+    posts: [
+      { x: L, y: gT, radius: 8 },
+      { x: L, y: gB, radius: 8 },
+      { x: R, y: gT, radius: 8 },
+      { x: R, y: gB, radius: 8 },
+      { x: cX, y: cY - 95, radius: 10 },
+      { x: cX + 95, y: cY, radius: 10 },
+      { x: cX, y: cY + 95, radius: 10 },
+      { x: cX - 95, y: cY, radius: 10 },
+    ],
+    goals: [
+      { scorer: 'blue', side: 'left', x: L - 2, yTop: gT, yBottom: gB },
+      { scorer: 'red', side: 'right', x: R + 2, yTop: gT, yBottom: gB },
+    ],
+  };
+}
+
 export const STADIUMS = {
   classic: classicPitch(),
+  pillars: pillarsPitch(),
+  diamond: diamondPitch(),
 };
 
 export function getStadium(key = 'classic') {
