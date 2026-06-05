@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Saka</title>
+<style>
+  :root { --red:#e15a4a; --blue:#4a78e1; --pitch:#3a6a3a; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; background:#222; color:#e8e8e8;
+    font-family: system-ui, -apple-system, sans-serif; }
+  button { font: inherit; cursor:pointer; border:none; border-radius:6px;
+    padding:8px 14px; background:#444; color:#eee; }
+  button:hover { background:#555; }
+  button.primary { background:#3a7; }
+  button.primary:hover { background:#4b8; }
+  input { font: inherit; padding:8px 10px; border-radius:6px; border:1px solid #555;
+    background:#2c2c2c; color:#eee; }
+  .hidden { display:none !important; }
+
+  /* welcome / name gate */
+  #welcome { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:18px; }
+  .welcome-card { background:#2c2c2c; padding:34px 32px; border-radius:14px; text-align:center;
+    box-shadow:0 10px 40px rgba(0,0,0,.45); width:100%; max-width:380px; }
+  .welcome-card h1 { margin:0 0 6px; font-size:38px; }
+  .welcome-card .sub { margin:0 0 22px; }
+  .welcome-card input { width:100%; text-align:center; font-size:17px; margin-bottom:14px; }
+  .welcome-card button { width:100%; font-size:17px; padding:11px; }
+  .welcome-card button:disabled { opacity:.5; cursor:default; }
+  #changeName { color:#8bf; text-decoration:none; }
+  #changeName:hover { text-decoration:underline; }
+
+  /* lobby */
+  #lobby { max-width:760px; margin:0 auto; padding:28px 18px; }
+  #lobby h1 { margin:0 0 4px; }
+  .sub { opacity:.6; margin:0 0 22px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:18px; }
+  .row > * { flex:0 0 auto; }
+  #roomList { display:flex; flex-direction:column; gap:8px; }
+  .roomcard { display:flex; align-items:center; justify-content:space-between;
+    background:#2c2c2c; padding:12px 14px; border-radius:8px; }
+  .roomcard .meta { opacity:.7; font-size:14px; }
+  .empty { opacity:.5; padding:20px; text-align:center; }
+  .err { color:#f88; min-height:18px; font-size:14px; }
+
+  /* room lobby */
+  #roomlobby { max-width:860px; margin:0 auto; padding:24px 18px; }
+  .rl-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; }
+  .rl-head h2 { margin:0; }
+  .teams { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:22px; }
+  .teamcol { background:#2c2c2c; border-radius:10px; padding:12px; display:flex; flex-direction:column; gap:10px; }
+  .teamcol h3 { margin:0; text-align:center; font-size:16px; }
+  .col-red h3 { color:var(--red); }
+  .col-blue h3 { color:var(--blue); }
+  .col-spec h3 { opacity:.7; }
+  .roster { list-style:none; margin:0; padding:0; min-height:90px; display:flex; flex-direction:column; gap:5px; }
+  .roster li { background:#383838; padding:6px 9px; border-radius:6px; font-size:14px; }
+  .roster li.self { outline:2px solid #fff5; }
+  .teamcol button { width:100%; }
+  .teamcol.col-red button { background:var(--red); }
+  .teamcol.col-blue button { background:var(--blue); }
+  .settings { background:#2c2c2c; border-radius:10px; padding:14px 16px; margin-bottom:18px; }
+  .settings h3 { margin:0 0 12px; font-size:16px; }
+  .tag { font-size:11px; background:#3a7; color:#fff; padding:2px 7px; border-radius:10px; vertical-align:middle; margin-left:6px; }
+  .setting { display:flex; align-items:center; gap:14px; margin:8px 0; }
+  .setting > label { width:90px; opacity:.8; font-size:14px; }
+  .opts { display:flex; gap:6px; flex-wrap:wrap; }
+  .opts button { padding:6px 12px; background:#3a3a3a; }
+  .opts button.sel { background:#3a7; color:#fff; }
+  .opts button:disabled { opacity:.55; cursor:default; }
+  .startrow { display:flex; align-items:center; gap:14px; }
+  #startBtn { font-size:17px; padding:10px 22px; }
+  #startBtn:disabled { opacity:.5; cursor:default; }
+
+  /* game */
+  #game { display:flex; flex-direction:column; align-items:center; gap:10px; padding:10px; }
+  .arena { display:flex; gap:14px; align-items:flex-start; }
+  #sideRoster { width:180px; background:#2c2c2c; border-radius:8px; padding:12px 14px;
+    display:flex; flex-direction:column; gap:14px; }
+  #sideRoster h4 { margin:0 0 6px; font-size:14px; display:flex; justify-content:space-between; }
+  #sideRoster h4.red { color:var(--red); }
+  #sideRoster h4.blue { color:var(--blue); }
+  #sideRoster h4.spec { color:#9aa; }
+  #sideRoster .cnt { opacity:.6; font-weight:400; }
+  #sideRoster ul { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:4px; }
+  #sideRoster li { font-size:13px; padding:4px 8px; background:#383838; border-radius:5px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #sideRoster li.self { outline:1px solid #fff6; }
+  #sideRoster li.empty { background:transparent; opacity:.4; font-style:italic; }
+  #scoreboard { display:flex; align-items:center; gap:24px; font-size:22px; font-weight:600; }
+  #scoreboard .red { color:var(--red); }
+  #scoreboard .blue { color:var(--blue); }
+  #clock { font-variant-numeric: tabular-nums; opacity:.85; font-size:18px; }
+  #banner { height:24px; font-size:16px; opacity:.9; }
+  .stage { position:relative; line-height:0; }
+  canvas { background:var(--pitch); border-radius:8px; box-shadow:0 6px 22px rgba(0,0,0,.5); }
+  #winner { position:absolute; inset:0; display:flex; flex-direction:column; gap:6px;
+    align-items:center; justify-content:center; background:rgba(0,0,0,.45);
+    border-radius:8px; line-height:1.1; animation:popin .25s ease-out; }
+  #winner .big { font-size:56px; font-weight:800; letter-spacing:1px;
+    text-shadow:0 3px 14px rgba(0,0,0,.6); }
+  #winner .fin { font-size:22px; opacity:.9; }
+  @keyframes popin { from { transform:scale(.8); opacity:0; } to { transform:scale(1); opacity:1; } }
+  .controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:center; }
+  .controls .red { background:var(--red); }
+  .controls .blue { background:var(--blue); }
+  .hint { font-size:13px; opacity:.6; }
+  code { background:#1f1f1f; padding:1px 5px; border-radius:3px; }
+</style>
+</head>
+<body>
+  <!-- WELCOME / NAME -->
+  <section id="welcome">
+    <div class="welcome-card">
+      <h1>⚽ Saka</h1>
+      <p class="sub">Server-authoritative disc soccer. Enter a name to get started.</p>
+      <input id="name" placeholder="Your name" maxlength="16" autocomplete="off" />
+      <button class="primary" id="enterBtn" disabled>Continue</button>
+    </div>
+  </section>
+
+  <!-- GLOBAL LOBBY -->
+  <section id="lobby" class="hidden">
+    <h1>⚽ Saka</h1>
+    <p class="sub">Playing as <strong id="whoami"></strong> · <a id="changeName" href="#">change name</a></p>
+    <div class="row">
+      <input id="roomName" placeholder="New room name" maxlength="24" />
+      <input id="roomPass" placeholder="Password (optional)" maxlength="32" type="text" autocomplete="off" />
+      <button class="primary" id="createBtn">Create room</button>
+      <button id="refreshBtn">Refresh</button>
+    </div>
+    <div class="err" id="lobbyErr"></div>
+    <h3>Open rooms</h3>
+    <div id="roomList"><div class="empty">No rooms yet — create one!</div></div>
+    <p class="hint" style="margin-top:24px">Sandbox (offline physics tuning): <a href="/sandbox.html" style="color:#8bf">/sandbox.html</a></p>
+  </section>
+
+  <!-- ROOM LOBBY -->
+  <section id="roomlobby" class="hidden">
+    <div class="rl-head">
+      <h2 id="rlName">Room</h2>
+      <button id="rlLeave">Leave room</button>
+    </div>
+    <div class="teams">
+      <div class="teamcol col-red">
+        <h3>Red</h3>
+        <ul id="rlRed" class="roster"></ul>
+        <button data-team="red">Join Red</button>
+      </div>
+      <div class="teamcol col-spec">
+        <h3>Spectators</h3>
+        <ul id="rlSpec" class="roster"></ul>
+        <button data-team="spec">Spectate</button>
+      </div>
+      <div class="teamcol col-blue">
+        <h3>Blue</h3>
+        <ul id="rlBlue" class="roster"></ul>
+        <button data-team="blue">Join Blue</button>
+      </div>
+    </div>
+    <div class="settings">
+      <h3>Match settings <span id="rlHostTag" class="tag hidden">you're the host</span></h3>
+      <div class="setting"><label>Time limit</label><div id="rlTime" class="opts"></div></div>
+      <div class="setting"><label>Score limit</label><div id="rlScore" class="opts"></div></div>
+      <div class="setting"><label>Stadium</label><div id="rlStadium" class="opts"></div></div>
+    </div>
+    <div class="startrow">
+      <button id="startBtn" class="primary hidden">Start match</button>
+      <span id="rlWait" class="hint"></span>
+    </div>
+  </section>
+
+  <!-- GAME -->
+  <section id="game" class="hidden">
+    <div id="scoreboard">
+      <span class="red" id="scoreRed">0</span>
+      <span style="opacity:.4">—</span>
+      <span class="blue" id="scoreBlue">0</span>
+      <span id="clock">5:00</span>
+    </div>
+    <div id="banner"></div>
+    <div class="arena">
+      <div class="stage">
+        <canvas id="c" width="1200" height="600"></canvas>
+        <div id="winner" class="hidden"></div>
+      </div>
+      <aside id="sideRoster">
+        <div class="rcol">
+          <h4 class="red">Red <span id="srRedCount" class="cnt">0</span></h4>
+          <ul id="srRed"></ul>
+        </div>
+        <div class="rcol">
+          <h4 class="blue">Blue <span id="srBlueCount" class="cnt">0</span></h4>
+          <ul id="srBlue"></ul>
+        </div>
+        <div class="rcol">
+          <h4 class="spec">Spectators <span id="srSpecCount" class="cnt">0</span></h4>
+          <ul id="srSpec"></ul>
+        </div>
+      </aside>
+    </div>
+    <div class="controls">
+      <span style="opacity:.7">Team:</span>
+      <button class="red" data-team="red">Red</button>
+      <button class="blue" data-team="blue">Blue</button>
+      <button data-team="spec">Spectate</button>
+      <button id="rematchBtn" class="primary hidden">Play again</button>
+      <span id="endNote" class="hint hidden"></span>
+      <button id="leaveBtn">Leave</button>
+    </div>
+    <div class="hint">Move <code>WASD</code>/arrows • Kick <code>Space</code>/<code>X</code> (release &amp; press to kick again)</div>
+  </section>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="module" src="/main.js"></script>
+</body>
+</html>

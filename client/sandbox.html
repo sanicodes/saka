@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Saka — Physics Sandbox</title>
+<style>
+  html, body { margin: 0; background: #2b2b2b; color: #ddd; font-family: system-ui, sans-serif; }
+  .wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px; }
+  canvas { background: #3a6a3a; border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,.4); }
+  .hint { font-size: 13px; opacity: .8; }
+  code { background: #1f1f1f; padding: 1px 5px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h2 style="margin:4px">Physics Sandbox <span style="opacity:.5;font-size:14px">(no network — tune the feel)</span></h2>
+  <canvas id="c" width="1200" height="600"></canvas>
+  <div class="hint">Move: <code>WASD</code> / arrows &nbsp;•&nbsp; Kick: <code>Space</code> / <code>X</code> (release &amp; press to kick again) &nbsp;•&nbsp; Reset: <code>R</code></div>
+</div>
+
+<script type="module">
+import { DT, SOLVER_PASSES } from '/shared/constants.js';
+import { stepWorld } from '/shared/physics.js';
+import { getStadium } from '/shared/stadiums.js';
+import { makeBall, makePosts, makePlayer, applyMoveInput, tryKick } from '/shared/factory.js';
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const stadium = getStadium('classic');
+
+let player, ball, posts, discs;
+function reset() {
+  player = makePlayer(stadium.spawnRed[0][0], stadium.spawnRed[0][1], 'red');
+  ball = makeBall(stadium);
+  posts = makePosts(stadium);
+  discs = [player, ball, ...posts];
+}
+reset();
+
+// --- input ---
+const keys = {};
+let kickHeld = false;        // is the kick key currently down
+let kickPressedThisTick = false; // edge: went up->down since last tick
+const KICK_KEYS = ['Space', 'KeyX'];
+const MOVE = {
+  up: ['KeyW', 'ArrowUp'], down: ['KeyS', 'ArrowDown'],
+  left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'],
+};
+function anyDown(list) { return list.some((k) => keys[k]); }
+
+addEventListener('keydown', (e) => {
+  if (e.code === 'KeyR') { reset(); return; }
+  if (KICK_KEYS.includes(e.code)) {
+    if (!kickHeld) kickPressedThisTick = true; // rising edge only
+    kickHeld = true;
+    e.preventDefault();
+  }
+  if ([...MOVE.up, ...MOVE.down, ...MOVE.left, ...MOVE.right].includes(e.code)) e.preventDefault();
+  keys[e.code] = true;
+});
+addEventListener('keyup', (e) => {
+  if (KICK_KEYS.includes(e.code)) kickHeld = false;
+  keys[e.code] = false;
+});
+
+// --- fixed-step loop ---
+let acc = 0, last = performance.now();
+function frame(now) {
+  acc += (now - last) / 1000;
+  last = now;
+  let guard = 0;
+  while (acc >= DT && guard++ < 5) {
+    tick();
+    acc -= DT;
+  }
+  render();
+  requestAnimationFrame(frame);
+}
+function tick() {
+  const input = {
+    u: anyDown(MOVE.up), d: anyDown(MOVE.down),
+    l: anyDown(MOVE.left), r: anyDown(MOVE.right),
+    kick: kickHeld,
+  };
+  applyMoveInput(player, input);
+  tryKick(player, ball, kickPressedThisTick);
+  kickPressedThisTick = false;
+  stepWorld(discs, stadium.segments, SOLVER_PASSES);
+}
+
+// --- render ---
+function render() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawField();
+  for (const p of posts) drawDisc(p, '#dddddd');
+  drawDisc(ball, '#ffffff', '#222');
+  drawDisc(player, '#e15a4a', '#7a2b22');
+}
+function drawField() {
+  ctx.strokeStyle = 'rgba(255,255,255,.35)';
+  ctx.lineWidth = 3;
+  for (const s of stadium.segments) {
+    ctx.beginPath();
+    ctx.moveTo(s.ax, s.ay);
+    ctx.lineTo(s.bx, s.by);
+    ctx.stroke();
+  }
+  // halfway line + center circle
+  ctx.beginPath();
+  ctx.moveTo(stadium.width / 2, 40);
+  ctx.lineTo(stadium.width / 2, 560);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(stadium.width / 2, 300, 70, 0, Math.PI * 2);
+  ctx.stroke();
+}
+function drawDisc(d, fill, stroke) {
+  ctx.beginPath();
+  ctx.arc(d.x, d.y, d.radius, 0, Math.PI * 2);
+  ctx.fillStyle = fill;
+  ctx.fill();
+  if (stroke) { ctx.lineWidth = 2; ctx.strokeStyle = stroke; ctx.stroke(); }
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
