@@ -4,6 +4,7 @@
 
 import { Renderer } from '/render.js';
 import { ui } from '/ui.js';
+import { sfx } from '/sfx.js';
 
 /* global io */
 const socket = io();
@@ -48,6 +49,7 @@ function enterName() {
   const n = nameInput.value.trim().slice(0, 16);
   if (!n) return;
   myName = n;
+  sfx.resume(); // first user gesture: unlock the audio context
   try {
     localStorage.setItem('saka:name', n);
   } catch {}
@@ -129,6 +131,18 @@ function leaveRoom() {
 $('leaveBtn').onclick = leaveRoom;
 $('rlLeave').onclick = leaveRoom;
 
+// ---------------------------------------------------------------- sound toggle
+const muteBtn = $('muteBtn');
+const syncMute = () => {
+  muteBtn.textContent = sfx.muted ? '🔇' : '🔊';
+};
+muteBtn.onclick = () => {
+  sfx.toggleMuted();
+  sfx.resume(); // also unlocks audio if this is the first gesture in the match
+  syncMute();
+};
+syncMute();
+
 // ---------------------------------------------------------------- room actions
 $('startBtn').onclick = () => socket.emit('room:start');
 $('shuffleBtn').onclick = () => socket.emit('room:shuffle');
@@ -156,16 +170,22 @@ socket.on('gameInit', (init) => {
   ui.setScore(init.score.red, init.score.blue);
 });
 
+let hadPowerup = false;
 socket.on('snapshot', (snap) => {
   renderer.pushSnapshot(snap);
   ui.setScore(snap.score[0], snap.score[1]);
   ui.setClock(snap.timeLeftMs);
+  // orb present last tick, gone this tick → someone picked it up
+  if (hadPowerup && !snap.powerup) sfx.powerup();
+  hadPowerup = !!snap.powerup;
 });
 
 socket.on('kick', ({ discId }) => {
   renderer.flashKick(discId);
+  sfx.kick();
 });
 
+let lastPhase = null;
 socket.on('state', (s) => {
   ui.setScore(s.score.red, s.score.blue);
   ui.setClock(s.timeLeftMs);
@@ -173,6 +193,13 @@ socket.on('state', (s) => {
   renderer.setPhase(s.state, s.kickoffTeam);
   ui.setWinner(s.state, s.score);
   ui.setEndControls(s.state, isOwner());
+  // sound only on the transition INTO a phase — `state` can resend the same one
+  if (s.state !== lastPhase) {
+    if (s.state === 'goal') sfx.goal();
+    else if (s.state === 'kickoff') sfx.whistle();
+    else if (s.state === 'ended') sfx.fullTime();
+    lastPhase = s.state;
+  }
   route(s.state);
 });
 
