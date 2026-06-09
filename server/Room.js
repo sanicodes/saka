@@ -27,6 +27,8 @@ import {
   KICKOFF_START_SPEED,
   KICKOFF_KEEPOUT_RADIUS,
   STAMINA_MAX,
+  KICK_STRENGTH,
+  POWER_KICK_STRENGTH,
 } from '../shared/constants.js';
 
 const TICK_HZ = 60;
@@ -126,6 +128,8 @@ export class Room {
       input: { u: false, d: false, l: false, r: false, run: false },
       kickHeld: false,
       pendingKick: false,
+      powerHeld: false,
+      pendingPower: false,
       disc: null,
     };
     this.players.set(socketId, player);
@@ -155,6 +159,9 @@ export class Room {
     const kick = !!input.kick;
     if (kick && !p.kickHeld) p.pendingKick = true; // rising edge
     p.kickHeld = kick;
+    const power = !!input.pkick;
+    if (power && !p.powerHeld) p.pendingPower = true; // rising edge
+    p.powerHeld = power;
   }
 
   setTeam(socketId, team) {
@@ -272,18 +279,20 @@ export class Room {
   _simulate() {
     for (const p of this.players.values()) {
       if (p.team === 'spec' || !p.disc) continue;
-      applyMoveInput(p.disc, { ...p.input, kick: p.kickHeld });
-      if (p.pendingKick) {
+      applyMoveInput(p.disc, { ...p.input, kick: p.kickHeld || p.powerHeld });
+      if (p.pendingKick || p.pendingPower) {
         // kicks land during play, and during a kickoff only for the team that
         // is allowed to take it (the scoring team is locked out until live)
         const canKick =
           this.state === 'play' ||
           (this.state === 'kickoff' && p.team !== this.kickoffLockTeam);
         if (canKick) {
+          const strength = p.pendingPower ? POWER_KICK_STRENGTH : KICK_STRENGTH;
           this.broadcastKick(p.disc.id);
-          tryKick(p.disc, this.ball, true);
+          tryKick(p.disc, this.ball, true, strength);
         }
         p.pendingKick = false;
+        p.pendingPower = false;
       }
     }
 

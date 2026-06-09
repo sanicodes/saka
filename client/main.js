@@ -184,8 +184,14 @@ const MOVE = {
   r: ['KeyD', 'ArrowRight'],
 };
 const KICK_KEYS = ['Space', 'KeyX'];
+const POWER_KICK_KEYS = ['KeyC'];
 const RUN_KEYS = ['ShiftLeft', 'ShiftRight'];
-const TRACKED = new Set([...Object.values(MOVE).flat(), ...KICK_KEYS, ...RUN_KEYS]);
+const TRACKED = new Set([
+  ...Object.values(MOVE).flat(),
+  ...KICK_KEYS,
+  ...POWER_KICK_KEYS,
+  ...RUN_KEYS,
+]);
 
 let lastSent = '';
 function buildInput() {
@@ -197,12 +203,13 @@ function buildInput() {
     r: down(MOVE.r),
     run: RUN_KEYS.some((k) => keys[k]),
     kick: KICK_KEYS.some((k) => keys[k]),
+    pkick: POWER_KICK_KEYS.some((k) => keys[k]),
   };
 }
 function sendInputIfChanged() {
   if (!inRoom) return;
   const input = buildInput();
-  const sig = `${+input.u}${+input.d}${+input.l}${+input.r}${+input.run}${+input.kick}`;
+  const sig = `${+input.u}${+input.d}${+input.l}${+input.r}${+input.run}${+input.kick}${+input.pkick}`;
   if (sig !== lastSent) {
     lastSent = sig;
     socket.emit('input', input);

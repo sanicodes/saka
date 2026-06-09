@@ -21,6 +21,7 @@ export const SPRINT_ACCEL = 0.18;
 export const KICK_ACCEL = 0.07; // slower while charging a kick
 export const KICK_RANGE = 12; // gap (px) within which a kick connects — forgiving so timing isn't frame-perfect
 export const KICK_STRENGTH = 5.0;
+export const POWER_KICK_STRENGTH = 10.0; // a harder kick on a separate key
 
 // --- Stamina ---
 export const STAMINA_MAX = 100;

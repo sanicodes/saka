@@ -108,16 +108,17 @@ export function applyMoveInput(player, input) {
   player.vy += iy * accel;
 }
 
-// Edge-triggered kick. Pass whether kick went up->down THIS tick. Returns true
-// if the ball was struck (so the caller can play a sound / effect).
-export function tryKick(player, ball, kickPressedThisTick) {
+// Edge-triggered kick. Pass whether kick went up->down THIS tick. `strength` lets
+// the caller request a harder (power) kick. Returns true if the ball was struck
+// (so the caller can play a sound / effect).
+export function tryKick(player, ball, kickPressedThisTick, strength = KICK_STRENGTH) {
   if (!kickPressedThisTick) return false;
   const gap = dist(player, ball) - player.radius - ball.radius;
   if (gap > KICK_RANGE) return false;
   const dx = ball.x - player.x;
   const dy = ball.y - player.y;
   const d = Math.hypot(dx, dy) || 1;
-  ball.vx += (dx / d) * KICK_STRENGTH;
-  ball.vy += (dy / d) * KICK_STRENGTH;
+  ball.vx += (dx / d) * strength;
+  ball.vy += (dy / d) * strength;
   return true;
 }
