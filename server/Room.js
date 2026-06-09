@@ -29,6 +29,16 @@ import {
   STAMINA_MAX,
   KICK_STRENGTH,
   POWER_KICK_STRENGTH,
+  PLAYER_RADIUS,
+  POWERUP_TYPES,
+  POWERUP_RADIUS,
+  POWERUP_FIRST_SPAWN_MS,
+  POWERUP_RESPAWN_MS,
+  POWERUP_BUFF_MS,
+  POWERUP_FREEZE_MS,
+  SPEED_BUFF_MULT,
+  MEGA_KICK_MULT,
+  GIANT_SCALE,
 } from '../shared/constants.js';
 
 const TICK_HZ = 60;
@@ -54,7 +64,11 @@ export class Room {
       scoreLimit: SCORE_LIMIT,
       timeLimitMs: TIME_LIMIT_MS,
       stadiumKey: this.stadiumKey,
+      mode: 'classic', // 'classic' | 'powerups'
     };
+
+    this.powerup = null; // { type, x, y } currently on the pitch (powerups mode)
+    this.powerupTimer = 0; // ticks until the next power-up spawns
 
     this.players = new Map(); // socketId -> player (insertion order = join order)
     this.ownerId = null;
@@ -207,6 +221,9 @@ export class Room {
     if (s.stadiumKey !== undefined && STADIUMS[s.stadiumKey]) {
       this._setStadium(s.stadiumKey);
     }
+    if (s.mode === 'classic' || s.mode === 'powerups') {
+      this.settings.mode = s.mode;
+    }
     this.sendRoom();
   }
 
@@ -279,24 +296,30 @@ export class Room {
   _simulate() {
     for (const p of this.players.values()) {
       if (p.team === 'spec' || !p.disc) continue;
-      applyMoveInput(p.disc, { ...p.input, kick: p.kickHeld || p.powerHeld });
-      if (p.pendingKick || p.pendingPower) {
+      const buffs = p.disc.buffs || {};
+      const frozen = (buffs.frozen ?? 0) > 0;
+      const mods = { frozen, accelMul: (buffs.speed ?? 0) > 0 ? SPEED_BUFF_MULT : 1 };
+      applyMoveInput(p.disc, { ...p.input, kick: p.kickHeld || p.powerHeld }, mods);
+      if ((p.pendingKick || p.pendingPower) && !frozen) {
         // kicks land during play, and during a kickoff only for the team that
         // is allowed to take it (the scoring team is locked out until live)
         const canKick =
           this.state === 'play' ||
           (this.state === 'kickoff' && p.team !== this.kickoffLockTeam);
         if (canKick) {
-          const strength = p.pendingPower ? POWER_KICK_STRENGTH : KICK_STRENGTH;
+          let strength = p.pendingPower ? POWER_KICK_STRENGTH : KICK_STRENGTH;
+          if ((buffs.mega ?? 0) > 0) strength *= MEGA_KICK_MULT;
           this.broadcastKick(p.disc.id);
           tryKick(p.disc, this.ball, true, strength);
         }
-        p.pendingKick = false;
-        p.pendingPower = false;
       }
+      p.pendingKick = false;
+      p.pendingPower = false;
     }
 
     stepWorld(this.discs, this.stadium.segments, SOLVER_PASSES);
+    this._tickBuffs();
+    this._updatePowerups();
 
     if (this.state === 'kickoff') {
       // keep the scoring team physically away from the ball, then start the round
@@ -366,6 +389,77 @@ export class Room {
     return false;
   }
 
+  // ---------------------------------------------------------------- power-ups
+  // count down every active buff/debuff; restore radius when 'giant' expires
+  _tickBuffs() {
+    for (const p of this.players.values()) {
+      const d = p.disc;
+      if (!d || !d.buffs) continue;
+      for (const k of Object.keys(d.buffs)) {
+        if (--d.buffs[k] <= 0) {
+          delete d.buffs[k];
+          if (k === 'giant') d.radius = PLAYER_RADIUS;
+        }
+      }
+    }
+  }
+
+  // spawn a power-up on a timer and hand it to the first player who touches it
+  _updatePowerups() {
+    if (this.settings.mode !== 'powerups' || this.state !== 'play') return;
+    if (!this.powerup) {
+      if (--this.powerupTimer <= 0) this._spawnPowerup();
+      return;
+    }
+    const pu = this.powerup;
+    for (const p of this.players.values()) {
+      if (p.team === 'spec' || !p.disc) continue;
+      const gap = Math.hypot(p.disc.x - pu.x, p.disc.y - pu.y) - p.disc.radius - POWERUP_RADIUS;
+      if (gap <= 0) {
+        this._collectPowerup(p, pu.type);
+        this.powerup = null;
+        this.powerupTimer = msToTicks(POWERUP_RESPAWN_MS);
+        return;
+      }
+    }
+  }
+
+  _spawnPowerup() {
+    const type = POWERUP_TYPES[Math.floor(Math.random() * POWERUP_TYPES.length)];
+    const m = 80; // keep orbs off the walls/goal mouths
+    const x = m + Math.random() * (this.stadium.width - 2 * m);
+    const y = m + Math.random() * (this.stadium.height - 2 * m);
+    this.powerup = { type, x, y };
+  }
+
+  _collectPowerup(player, type) {
+    const d = player.disc;
+    d.buffs = d.buffs || {};
+    if (type === 'freeze') {
+      // freeze every opponent for a short window
+      const ticks = msToTicks(POWERUP_FREEZE_MS);
+      for (const o of this.players.values()) {
+        if (o === player || o.team === 'spec' || !o.disc || o.team === player.team) continue;
+        o.disc.buffs = o.disc.buffs || {};
+        o.disc.buffs.frozen = ticks;
+      }
+    } else {
+      d.buffs[type] = msToTicks(POWERUP_BUFF_MS);
+      if (type === 'giant') d.radius = PLAYER_RADIUS * GIANT_SCALE;
+    }
+  }
+
+  // wipe buffs + any active orb (called each kickoff so every play starts clean)
+  _resetPowerState() {
+    for (const p of this.players.values()) {
+      if (!p.disc) continue;
+      p.disc.buffs = {};
+      if (p.disc.kind === 'player') p.disc.radius = PLAYER_RADIUS;
+    }
+    this.powerup = null;
+    this.powerupTimer = msToTicks(POWERUP_FIRST_SPAWN_MS);
+  }
+
   _checkGoal() {
     const b = this.ball;
     for (const g of this.stadium.goals) {
@@ -398,6 +492,7 @@ export class Room {
 
   _enterKickoff() {
     this._resetPositions();
+    this._resetPowerState();
     this.state = 'kickoff';
     // after a goal, the scorers are locked out of the ball until the conceding
     // team takes the kickoff; the very first kickoff of a match has no lock
@@ -517,7 +612,10 @@ export class Room {
           d.kind === 'player' ? Math.round(((d.stamina ?? STAMINA_MAX) / STAMINA_MAX) * 100) : null,
         exhausted: d.kind === 'player' ? !!d.exhausted : false,
         sprinting: d.kind === 'player' ? !!d.isSprinting : false,
+        buffs:
+          d.kind === 'player' && d.buffs && Object.keys(d.buffs).length ? Object.keys(d.buffs) : null,
       })),
+      powerup: this.powerup ? { type: this.powerup.type, x: Math.round(this.powerup.x), y: Math.round(this.powerup.y) } : null,
       score: [this.score.red, this.score.blue],
       state: this.state,
       timeLeftMs: this.timeLeftMs(),

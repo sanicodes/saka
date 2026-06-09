@@ -2,7 +2,12 @@
 // ~INTERP_DELAY_MS in the past, lerping between the two surrounding snapshots.
 // This hides jitter and packet loss. Decoupled from the network rate via rAF.
 
-import { INTERP_DELAY_MS, KICKOFF_KEEPOUT_RADIUS } from '/shared/constants.js';
+import {
+  INTERP_DELAY_MS,
+  KICKOFF_KEEPOUT_RADIUS,
+  POWERUP_RADIUS,
+  GIANT_SCALE,
+} from '/shared/constants.js';
 
 const COLORS = {
   red: '#e15a4a',
@@ -12,6 +17,15 @@ const COLORS = {
   post: '#dddddd',
   line: 'rgba(255,255,255,.35)',
 };
+// per power-up colors + a single-char glyph drawn on the orb / used for buff auras
+const PU_COLORS = {
+  speed: '#7ed982',
+  mega: '#f4b13e',
+  freeze: '#5ad1e1',
+  frozen: '#5ad1e1',
+  giant: '#b67ae1',
+};
+const PU_GLYPH = { speed: 'S', mega: 'K', freeze: 'F', giant: 'G' };
 const BUFFER_MAX = 30;
 const KICK_FLASH_MS = 240;
 
@@ -27,6 +41,7 @@ export class Renderer {
     this.phase = null; // current room state
     this.kickoffTeam = null; // team taking the kickoff (post-goal); null otherwise
     this.kickFlashById = new Map(); // discId -> performance.now()
+    this.powerup = null; // { type, x, y } orb on the pitch (powerups mode)
   }
 
   setPhase(state, kickoffTeam) {
@@ -59,10 +74,12 @@ export class Renderer {
         stamina: d.stamina,
         exhausted: !!d.exhausted,
         sprinting: !!d.sprinting,
+        buffs: d.buffs || null,
       });
     }
     this.buffer.push({ recvTime: performance.now(), byId });
     if (this.buffer.length > BUFFER_MAX) this.buffer.shift();
+    this.powerup = snap.powerup || null; // not interpolated — static while present
   }
 
   flashKick(discId) {
@@ -103,6 +120,7 @@ export class Renderer {
               : pb.stamina,
           exhausted: pb.exhausted,
           sprinting: pb.sprinting,
+          buffs: pb.buffs,
         });
       } else out.set(id, pb);
     }
@@ -121,6 +139,9 @@ export class Renderer {
 
     // post-goal kickoff: show the scoring team's keep-out ring around the ball
     if (this.phase === 'kickoff' && this.kickoffTeam) this._drawKeepOut(positions);
+
+    // power-up orb sits under the discs so players visibly cover it on pickup
+    if (this.powerup) this._drawPowerup();
 
     // posts first, then ball, then players (players on top)
     const now = performance.now();
@@ -163,8 +184,15 @@ export class Renderer {
     ctx.stroke();
   }
 
+  // effective draw radius — 'giant' buff grows the disc to match the server
+  _effRadius(p, s) {
+    const giant = s.kind === 'player' && Array.isArray(p.buffs) && p.buffs.includes('giant');
+    return s.radius * (giant ? GIANT_SCALE : 1);
+  }
+
   _drawDisc(p, s, isSelf, id, now) {
     const { ctx } = this;
+    const radius = this._effRadius(p, s);
     let fill = COLORS.post,
       stroke = null;
     if (s.kind === 'ball') {
@@ -175,9 +203,9 @@ export class Renderer {
       stroke = isSelf ? '#fff' : 'rgba(0,0,0,.45)';
     }
     const kickFlash = s.kind === 'player' ? this._kickFlashAmount(id, now) : 0;
-    if (kickFlash > 0) this._drawKickFlash(p, s, kickFlash);
+    if (kickFlash > 0) this._drawKickFlash(p, { radius }, kickFlash);
     ctx.beginPath();
-    ctx.arc(p.x, p.y, s.radius, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
     ctx.fillStyle = fill;
     ctx.fill();
     if (stroke) {
@@ -187,12 +215,35 @@ export class Renderer {
     }
     if (kickFlash > 0) {
       ctx.beginPath();
-      ctx.arc(p.x, p.y, s.radius + 2, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, radius + 2, 0, Math.PI * 2);
       ctx.lineWidth = 2;
       ctx.strokeStyle = `rgba(255,245,170,${0.85 * kickFlash})`;
       ctx.stroke();
     }
-    if (isSelf && s.kind === 'player') this._drawStamina(p, s);
+    if (s.kind === 'player' && Array.isArray(p.buffs) && p.buffs.length) {
+      this._drawBuffAuras(p, radius);
+    }
+    if (isSelf && s.kind === 'player') this._drawStamina(p, { radius });
+  }
+
+  // concentric glowing rings, one per active buff/debuff, in that buff's color
+  _drawBuffAuras(p, radius) {
+    const { ctx } = this;
+    ctx.save();
+    let i = 0;
+    for (const b of p.buffs) {
+      const c = PU_COLORS[b];
+      if (!c) continue;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, radius + 4 + i * 3, 0, Math.PI * 2);
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = c;
+      ctx.shadowColor = c;
+      ctx.shadowBlur = 8;
+      ctx.stroke();
+      i++;
+    }
+    ctx.restore();
   }
 
   _drawStamina(p, s) {
@@ -262,13 +313,36 @@ export class Renderer {
     ctx.restore();
   }
 
+  _drawPowerup() {
+    const pu = this.powerup;
+    const { ctx } = this;
+    const c = PU_COLORS[pu.type] || '#ffffff';
+    ctx.save();
+    ctx.shadowColor = c;
+    ctx.shadowBlur = 14;
+    ctx.beginPath();
+    ctx.arc(pu.x, pu.y, POWERUP_RADIUS, 0, Math.PI * 2);
+    ctx.fillStyle = c;
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(255,255,255,.9)';
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#1c1c1c';
+    ctx.font = '700 15px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(PU_GLYPH[pu.type] || '?', pu.x, pu.y + 1);
+    ctx.restore();
+  }
+
   _drawName(p, s, name, isSelf) {
     if (!name) return;
     const { ctx } = this;
     ctx.font = `${isSelf ? '600 ' : ''}13px system-ui, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
-    const y = p.y - s.radius - 5;
+    const y = p.y - this._effRadius(p, s) - 5;
     ctx.lineWidth = 3;
     ctx.strokeStyle = 'rgba(0,0,0,.7)';
     ctx.strokeText(name, p.x, y); // outline for legibility on the pitch

@@ -24,6 +24,10 @@ const SCORE_OPTS = [
   { label: '10', value: 10 },
   { label: '∞', value: 0 },
 ];
+const MODE_OPTS = [
+  { label: 'Classic', value: 'classic' },
+  { label: 'Power-ups', value: 'powerups' },
+];
 
 export const ui = {
   show(screen) {
@@ -93,6 +97,9 @@ export const ui = {
     const stadiumOpts = room.stadiums.map((s) => ({ label: s.name, value: s.key }));
     renderOpts($('rlStadium'), stadiumOpts, room.settings.stadiumKey, isOwner, (v) =>
       handlers.onSetting({ stadiumKey: v })
+    );
+    renderOpts($('rlMode'), MODE_OPTS, room.settings.mode || 'classic', isOwner, (v) =>
+      handlers.onSetting({ mode: v })
     );
 
     const ready =

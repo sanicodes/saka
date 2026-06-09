@@ -29,6 +29,17 @@ export const STAMINA_DRAIN = 0.45; // per tick while sprinting
 export const STAMINA_REGEN = 0.22; // per tick while not sprinting
 export const STAMINA_EXHAUST_REENABLE = 25;
 
+// --- Power-ups (only active in the 'powerups' game mode) ---
+export const POWERUP_TYPES = ['speed', 'mega', 'freeze', 'giant'];
+export const POWERUP_RADIUS = 14; // pickup orb size (px)
+export const POWERUP_FIRST_SPAWN_MS = 5000; // first orb appears this long after a kickoff
+export const POWERUP_RESPAWN_MS = 10000; // gap from a pickup to the next spawn
+export const POWERUP_BUFF_MS = 6000; // how long speed/mega/giant last on the collector
+export const POWERUP_FREEZE_MS = 1500; // how long opponents stay frozen
+export const SPEED_BUFF_MULT = 1.6; // movement accel multiplier while 'speed' is active
+export const MEGA_KICK_MULT = 2.2; // kick strength multiplier while 'mega' is active
+export const GIANT_SCALE = 1.7; // disc radius multiplier while 'giant' is active
+
 // --- Walls ---
 export const WALL_BCOEFF = 1.0; // perimeter walls are bouncy
 

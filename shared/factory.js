@@ -79,9 +79,14 @@ export function resetPlayerStamina(player) {
 
 // Apply directional input acceleration to a player's velocity (before integrate).
 // `input` = { u, d, l, r, kick, run }. Slower accel while the kick key is held.
-export function applyMoveInput(player, input) {
+// `mods` (powerups mode): { frozen } blocks all movement, { accelMul } scales accel.
+export function applyMoveInput(player, input, mods = {}) {
   let ix = (input.r ? 1 : 0) - (input.l ? 1 : 0);
   let iy = (input.d ? 1 : 0) - (input.u ? 1 : 0);
+  if (mods.frozen) {
+    ix = 0;
+    iy = 0;
+  }
   const len = Math.hypot(ix, iy);
   if (len > 0) {
     ix /= len;
@@ -103,7 +108,8 @@ export function applyMoveInput(player, input) {
     }
   }
 
-  const accel = input.kick ? KICK_ACCEL : canSprint ? SPRINT_ACCEL : MOVE_ACCEL;
+  const baseAccel = input.kick ? KICK_ACCEL : canSprint ? SPRINT_ACCEL : MOVE_ACCEL;
+  const accel = baseAccel * (mods.accelMul ?? 1);
   player.vx += ix * accel;
   player.vy += iy * accel;
 }
