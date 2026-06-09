@@ -190,6 +190,22 @@ export class Room {
     if (this._isLive()) this.sendInit();
   }
 
+  // owner-only, lobby-only: randomly re-deal the current participants (everyone
+  // already on red/blue) into two balanced teams. Spectators are left alone.
+  shuffleTeams(socketId) {
+    if (!this.isOwner(socketId) || this.state !== 'lobby') return;
+    const pool = [...this.players.values()].filter((p) => p.team === 'red' || p.team === 'blue');
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1)); // Fisher-Yates
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    pool.forEach((p, i) => {
+      p.team = i % 2 === 0 ? 'red' : 'blue';
+      this._placePlayer(p);
+    });
+    this.sendRoom();
+  }
+
   _placePlayer(player) {
     const team = player.team === 'blue' ? 'blue' : 'red';
     const spawns = team === 'blue' ? this.stadium.spawnBlue : this.stadium.spawnRed;

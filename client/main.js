@@ -131,6 +131,7 @@ $('rlLeave').onclick = leaveRoom;
 
 // ---------------------------------------------------------------- room actions
 $('startBtn').onclick = () => socket.emit('room:start');
+$('shuffleBtn').onclick = () => socket.emit('room:shuffle');
 $('rematchBtn').onclick = () => socket.emit('rematch');
 for (const btn of document.querySelectorAll('[data-team]')) {
   btn.onclick = () => socket.emit('team', { team: btn.dataset.team });

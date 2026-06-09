@@ -106,6 +106,10 @@ export const ui = {
       room.players.some((p) => p.team === 'red') && room.players.some((p) => p.team === 'blue');
     $('startBtn').classList.toggle('hidden', !isOwner);
     $('startBtn').disabled = !ready;
+    // shuffle is host-only and needs at least 2 players already on a team to do anything
+    const participants = room.players.filter((p) => p.team === 'red' || p.team === 'blue').length;
+    $('shuffleBtn').classList.toggle('hidden', !isOwner);
+    $('shuffleBtn').disabled = participants < 2;
     if (isOwner) {
       $('rlWait').textContent = ready ? '' : 'Put at least one player on each team to start.';
     } else {

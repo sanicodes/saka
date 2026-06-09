@@ -59,6 +59,8 @@
   .teamcol button { width:100%; }
   .teamcol.col-red button { background:var(--red); }
   .teamcol.col-blue button { background:var(--blue); }
+  .teamtools { display:flex; justify-content:center; margin:0 0 14px; }
+  .teamtools button { background:#3a3a3a; padding:7px 16px; }
   .settings { background:#2c2c2c; border-radius:10px; padding:14px 16px; margin-bottom:18px; }
   .settings h3 { margin:0 0 12px; font-size:16px; }
   .tag { font-size:11px; background:#3a7; color:#fff; padding:2px 7px; border-radius:10px; vertical-align:middle; margin-left:6px; }
@@ -157,6 +159,9 @@
         <ul id="rlBlue" class="roster"></ul>
         <button data-team="blue">Join Blue</button>
       </div>
+    </div>
+    <div class="teamtools">
+      <button id="shuffleBtn" class="hidden">🔀 Shuffle teams</button>
     </div>
     <div class="settings">
       <h3>Match settings <span id="rlHostTag" class="tag hidden">you're the host</span></h3>

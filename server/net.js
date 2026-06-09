@@ -149,6 +149,11 @@ export function wireSockets(io) {
       }
     });
 
+    socket.on('room:shuffle', () => {
+      const room = registry.get(socket.data.roomId);
+      if (room) room.shuffleTeams(socket.id);
+    });
+
     socket.on('room:settings', (settings) => {
       const room = registry.get(socket.data.roomId);
       if (room && settings && typeof settings === 'object') {
