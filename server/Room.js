@@ -334,6 +334,7 @@ export class Room {
     }
 
     stepWorld(this.discs, this.stadium.segments, SOLVER_PASSES);
+    this._containDiscs();
     this._tickBuffs();
     this._updatePowerups();
 
@@ -350,6 +351,35 @@ export class Room {
       this._checkGoal();
       const tl = this.settings.timeLimitMs;
       if (tl > 0 && this.elapsedMs >= tl) this._endMatch();
+    }
+  }
+
+  // Last-resort safety net: pin every disc inside the pitch bounds. Substepping
+  // in stepWorld already stops fast movers from tunnelling through walls, so
+  // this should never fire in normal play — but if anything (a NaN-adjacent
+  // velocity, a spawn overlap, an unforeseen edge) ever pushes a disc out of
+  // the world, we clamp it back rather than let it fly off and "disappear".
+  // Net pockets sit within [r, dim-r], so this doesn't interfere with goals.
+  _containDiscs() {
+    const W = this.stadium.width,
+      H = this.stadium.height;
+    for (const d of this.discs) {
+      if (d.invMass === 0) continue;
+      const r = d.radius;
+      if (d.x < r) {
+        d.x = r;
+        if (d.vx < 0) d.vx = 0;
+      } else if (d.x > W - r) {
+        d.x = W - r;
+        if (d.vx > 0) d.vx = 0;
+      }
+      if (d.y < r) {
+        d.y = r;
+        if (d.vy < 0) d.vy = 0;
+      } else if (d.y > H - r) {
+        d.y = H - r;
+        if (d.vy > 0) d.vy = 0;
+      }
     }
   }
 

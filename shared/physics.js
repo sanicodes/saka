@@ -133,11 +133,50 @@ export function resolveCollisions(discs, segments, passes) {
   }
 }
 
+// Most substeps we'll ever split one tick into — guards against a pathological
+// (e.g. NaN-adjacent) velocity spinning the loop. 16 covers any sane game speed.
+const MAX_SUBSTEPS = 16;
+
 // One full physics tick: integrate every disc, then resolve. Player input
 // acceleration must be applied to velocities BEFORE calling this.
+//
+// Motion is substepped so no disc travels more than a fraction of its own
+// radius per sub-tick. Collision here is discrete: collideSegment only reflects
+// a disc whose center is already within `radius` of a wall. A fast mover (a
+// power-kicked ball can reach ~2x its radius per tick) would otherwise jump
+// clean past a thin wall in one step — the solver then finds it on the far side
+// and never reflects it, so it escapes the pitch and "disappears". Substepping
+// keeps every mover within the solver's reach at any speed; at low speeds it
+// collapses to a single step, so normal feel is unchanged.
 export function stepWorld(discs, segments, passes) {
-  for (let i = 0; i < discs.length; i++) integrate(discs[i]);
-  resolveCollisions(discs, segments, passes);
+  // Damping is a per-tick velocity multiplier — apply it once up front so the
+  // substep count doesn't change how much drag a disc feels.
+  let maxStep = 0;
+  let minRadius = Infinity;
+  for (let i = 0; i < discs.length; i++) {
+    const d = discs[i];
+    if (d.invMass === 0) continue;
+    d.vx *= d.damping;
+    d.vy *= d.damping;
+    const sp = Math.hypot(d.vx, d.vy);
+    if (sp > maxStep) maxStep = sp;
+    if (d.radius < minRadius) minRadius = d.radius;
+  }
+
+  // Enough substeps that per-substep displacement stays under half the smallest
+  // mover's radius (so it overlaps any wall it crosses for a step or two).
+  const budget = Number.isFinite(minRadius) ? Math.max(1, minRadius * 0.5) : 1;
+  const sub = Math.min(MAX_SUBSTEPS, Math.max(1, Math.ceil(maxStep / budget)));
+
+  for (let s = 0; s < sub; s++) {
+    for (let i = 0; i < discs.length; i++) {
+      const d = discs[i];
+      if (d.invMass === 0) continue;
+      d.x += d.vx / sub;
+      d.y += d.vy / sub;
+    }
+    resolveCollisions(discs, segments, passes);
+  }
 }
 
 export function dist(a, b) {
