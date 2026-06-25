@@ -231,10 +231,76 @@ function diamondPitch() {
   };
 }
 
+// Colossus pitch: Classic's clean layout scaled up ~1.5x for big-team games —
+// more open space, longer runs, wider goal mouths.
+function colossusPitch() {
+  const W = 1800,
+    H = 900;
+  const L = 60,
+    R = 1740,
+    T = 60,
+    B = 840; // field rectangle
+  const gT = 330,
+    gB = 570; // goal mouth (centered, height 240)
+  const netL = 15,
+    netR = 1785; // back of nets
+
+  return {
+    name: 'Colossus',
+    width: W,
+    height: H,
+    spawnRed: [
+      [450, 450],
+      [450, 300],
+      [450, 600],
+      [675, 375],
+      [675, 525],
+      [300, 450],
+    ],
+    spawnBlue: [
+      [1350, 450],
+      [1350, 300],
+      [1350, 600],
+      [1125, 375],
+      [1125, 525],
+      [1500, 450],
+    ],
+    ballSpawn: [900, 450],
+    segments: [
+      // perimeter
+      { ax: L, ay: T, bx: R, by: T, bCoeff: WALL_BCOEFF }, // top
+      { ax: L, ay: B, bx: R, by: B, bCoeff: WALL_BCOEFF }, // bottom
+      { ax: L, ay: T, bx: L, by: gT, bCoeff: WALL_BCOEFF }, // left upper
+      { ax: L, ay: gB, bx: L, by: B, bCoeff: WALL_BCOEFF }, // left lower
+      { ax: R, ay: T, bx: R, by: gT, bCoeff: WALL_BCOEFF }, // right upper
+      { ax: R, ay: gB, bx: R, by: B, bCoeff: WALL_BCOEFF }, // right lower
+      // left net pocket
+      { ax: netL, ay: gT, bx: netL, by: gB, bCoeff: NET }, // back
+      { ax: netL, ay: gT, bx: L, by: gT, bCoeff: NET }, // top
+      { ax: netL, ay: gB, bx: L, by: gB, bCoeff: NET }, // bottom
+      // right net pocket
+      { ax: netR, ay: gT, bx: netR, by: gB, bCoeff: NET },
+      { ax: netR, ay: gT, bx: R, by: gT, bCoeff: NET },
+      { ax: netR, ay: gB, bx: R, by: gB, bCoeff: NET },
+    ],
+    posts: [
+      { x: L, y: gT, radius: 8 },
+      { x: L, y: gB, radius: 8 },
+      { x: R, y: gT, radius: 8 },
+      { x: R, y: gB, radius: 8 },
+    ],
+    goals: [
+      { scorer: 'blue', side: 'left', x: L - 2, yTop: gT, yBottom: gB },
+      { scorer: 'red', side: 'right', x: R + 2, yTop: gT, yBottom: gB },
+    ],
+  };
+}
+
 export const STADIUMS = {
   classic: classicPitch(),
   pillars: pillarsPitch(),
   diamond: diamondPitch(),
+  colossus: colossusPitch(),
 };
 
 export function getStadium(key = 'classic') {
