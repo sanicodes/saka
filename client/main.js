@@ -54,9 +54,51 @@ function enterName() {
     localStorage.setItem('saka:name', n);
   } catch {}
   $('whoami').textContent = n;
+  if (inRoom) socket.emit('rename', { name: n }); // keep the room roster in sync
   ui.show('lobby');
   socket.emit('lobby:join'); // (re)subscribe + refresh room list
+  // arrived via a share link (?room=...) — jump straight into that room
+  if (pendingRoom) {
+    const rid = pendingRoom;
+    pendingRoom = null;
+    joinRoom(rid, false);
+  }
 }
+
+// ---------------------------------------------------------------- share links
+// Joining/creating puts ?room=<id> in the address bar (shareable as-is); the
+// Copy link button grabs it for you. Opening such a link auto-joins the room
+// right after the name gate.
+let pendingRoom = new URLSearchParams(location.search).get('room');
+
+function setUrlRoom(roomId) {
+  const url = roomId ? `${location.pathname}?room=${encodeURIComponent(roomId)}` : location.pathname;
+  history.replaceState(null, '', url);
+}
+
+$('rlRename').onclick = () => {
+  const n = (prompt('New name:', myName) || '').trim().slice(0, 16);
+  if (!n || n === myName) return;
+  myName = n;
+  try {
+    localStorage.setItem('saka:name', n);
+  } catch {}
+  $('whoami').textContent = n;
+  socket.emit('rename', { name: n }); // server updates roster + disc labels
+};
+
+$('rlShare').onclick = () => {
+  const rid = roomData?.roomId;
+  if (!rid) return;
+  const link = `${location.origin}${location.pathname}?room=${encodeURIComponent(rid)}`;
+  const btn = $('rlShare');
+  const done = () => {
+    btn.textContent = '✓ Copied';
+    setTimeout(() => (btn.textContent = '🔗 Copy link'), 1200);
+  };
+  if (navigator.clipboard?.writeText) navigator.clipboard.writeText(link).then(done, () => prompt('Copy this link:', link));
+  else prompt('Copy this link:', link);
+};
 
 $('changeName').onclick = (e) => {
   e.preventDefault();
@@ -79,15 +121,19 @@ socket.on('lobby:rooms', (rooms) => {
   if (!inRoom) ui.renderRoomList(rooms, joinRoom);
 });
 
-function joinRoom(roomId, locked) {
-  let password;
-  if (locked) {
+function joinRoom(roomId, locked, password) {
+  if (locked && password === undefined) {
     password = prompt('This room is locked. Enter the password:');
     if (password === null) return; // cancelled
   }
   ui.setError('');
   socket.emit('room:join', { roomId, playerName: playerName(), password }, (res) => {
-    if (res?.error) return ui.setError(res.error);
+    if (res?.error) {
+      // a share link doesn't know the room is locked — ask and retry once
+      if (res.locked && password === undefined) return joinRoom(roomId, true);
+      return ui.setError(res.error);
+    }
+    setUrlRoom(res.roomId);
     enterRoom(res.selfId);
   });
 }
@@ -98,6 +144,7 @@ $('createBtn').onclick = () => {
   const password = ($('roomPass').value || '').trim();
   socket.emit('room:create', { name, playerName: playerName(), password }, (res) => {
     if (res?.error) return ui.setError(res.error);
+    setUrlRoom(res.roomId);
     enterRoom(res.selfId);
   });
 };
@@ -121,6 +168,7 @@ function enterRoom(id) {
 
 function leaveRoom() {
   socket.emit('room:leave');
+  setUrlRoom(null);
   inRoom = false;
   roomData = null;
   renderer.init = null;

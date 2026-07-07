@@ -186,6 +186,16 @@ export class Room {
     p.powerHeld = power;
   }
 
+  renamePlayer(socketId, name) {
+    // lobby-only, like team picking — no identity changes mid-match
+    if (this.state !== 'lobby') return;
+    const p = this.players.get(socketId);
+    const n = (typeof name === 'string' ? name.trim() : '').slice(0, 16);
+    if (!p || !n || n === p.name) return;
+    p.name = n;
+    this.sendRoom();
+  }
+
   setTeam(socketId, team) {
     const p = this.players.get(socketId);
     if (!p || !['red', 'blue', 'spec'].includes(team)) return;

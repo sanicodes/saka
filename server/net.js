@@ -133,6 +133,14 @@ export function wireSockets(io) {
       if (room && input && typeof input === 'object') room.setInput(socket.id, input);
     });
 
+    socket.on('rename', ({ name } = {}) => {
+      const now = Date.now();
+      if (now - (socket.data.lastRename || 0) < 1000) return; // spam guard
+      socket.data.lastRename = now;
+      const room = registry.get(socket.data.roomId);
+      if (room) room.renamePlayer(socket.id, name);
+    });
+
     socket.on('team', ({ team } = {}) => {
       const room = registry.get(socket.data.roomId);
       if (room) {

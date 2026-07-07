@@ -19,7 +19,10 @@ starts the match. `PORT` env var overrides the port.
 
 1. **Name gate** — enter a name (remembered via `localStorage`) before the lobby.
 2. **Global lobby** — create a room (optionally **password-protected** 🔒) or join one.
-   Joining a locked room prompts for the password.
+   Joining a locked room prompts for the password. Every room has a **shareable
+   link** (`?room=<id>` — the address bar updates when you join, and the room lobby
+   has a **🔗 Copy link** button); opening one jumps straight into the room after
+   the name gate, asking for the password if the room is locked.
 3. **Room lobby** — Red / Spectators / Blue columns. Everyone joins as a spectator and
    clicks **Join Red / Join Blue / Spectate**. The **host** (★, first player; reassigned
    if they leave) sets **time limit**, **score limit**, and **stadium**, then **Start
