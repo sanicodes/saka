@@ -18,10 +18,56 @@ export const BALL_DAMP = 0.99;
 // --- Movement & kick ---
 export const MOVE_ACCEL = 0.12;
 export const SPRINT_ACCEL = 0.18;
+// Active braking: with PLAYER_DAMP (0.96) alone, a released player coasts
+// ~1.5 s / 50-90 px, which reads as "input latching". On any tick with NO
+// directional input, applyMoveInput additionally scales the player's own
+// velocity by PLAYER_BRAKE. Combined with PLAYER_DAMP that's ~0.82/tick, so a
+// full-speed player settles in ~20 ticks (~0.33 s, ~12 px of glide) — stops
+// feel deliberate but a little momentum survives, keeping bumps/collisions
+// meaningful. Lives here (not in stepWorld) so ball damping is untouched and
+// collision impulses can still shove a braking player.
+export const PLAYER_BRAKE = 0.85; // extra per-tick velocity multiplier while no move key is held
+export const PLAYER_BRAKE_SNAP = 0.02; // below this speed (px/tick) a braking player snaps to rest (kills sub-pixel drift)
 export const KICK_ACCEL = 0.07; // slower while charging a kick
 export const KICK_RANGE = 12; // gap (px) within which a kick connects — forgiving so timing isn't frame-perfect
 export const KICK_STRENGTH = 5.0;
 export const POWER_KICK_STRENGTH = 10.0; // a harder kick on a separate key
+// Kicks are AIMED along your facing (the notch/aim line) when the ball is
+// within this angle of it — predictable, steerable shots. A ball further
+// around (behind you) is cleared along the player→ball line instead, so
+// scramble kicks never fire "through" your own disc.
+export const KICK_AIM_CONE = 1.9; // rad (~109°) either side of the facing
+
+// --- Heading / turn radius (FC-style momentum) ---
+// Players have a facing (heading) that slews toward the input direction at a
+// speed-dependent rate, and thrust is applied ALONG the heading. Standing
+// still you spin almost instantly; at sprint speed a reversal carves an arc.
+export const TURN_RATE_MAX = 0.5; // rad/tick at a standstill (u-turn in ~6 ticks)
+export const TURN_SPEED_FACTOR = 0.9; // turn rate divisor per px/tick of speed (sprint u-turn ~0.5 s)
+
+// --- Ball handling (dribble / first touch) ---
+// Close control engages for the single nearest eligible player within range:
+// not sprinting, not fresh off a kick, and no opponent also in range (a
+// contested ball stays loose and pure physics decides).
+export const HANDLE_RANGE = 18; // gap (px) within which close control engages
+export const HANDLE_GAP = 8; // carry point sits this far beyond touching distance (clearance so the carrier doesn't collide with their own ball)
+export const HANDLE_PULL = 0.035; // spring accel per px of carry-point error
+export const HANDLE_MAX_PULL = 0.22; // pull cap per tick — kicks and bumps still overpower it
+export const HANDLE_TURN_RATE = 0.22; // rad/tick the carry point swings toward your FACING — the ball visibly follows your turns and sits in front of the aim line
+export const TRAP_BLEND = 0.14; // per-tick blend of ball velocity toward the handler's (first touch)
+export const HANDLE_KICK_COOLDOWN_TICKS = 12; // no handling right after your own kick
+
+// --- Charged kick ---
+// Space/X kicks instantly on press (unchanged feel). C charges while held and
+// fires on release, scaling from KICK_STRENGTH (tap) to POWER_KICK_STRENGTH.
+export const KICK_CHARGE_FULL_MS = 900;
+
+// --- Curve / spin ---
+// Moving sideways across the ball at kick time puts spin on it; spinning
+// rotates the ball's velocity a little each tick (Magnus-lite) and decays.
+export const CURVE_SPIN_FACTOR = 0.007; // kicker lateral speed -> spin (rad/tick)
+export const CURVE_SPIN_MAX = 0.018; // curve rate cap (rad/tick)
+export const CURVE_SPIN_DECAY = 0.985; // spin multiplier per tick
 
 // --- Stamina ---
 export const STAMINA_MAX = 100;

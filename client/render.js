@@ -7,6 +7,7 @@ import {
   KICKOFF_KEEPOUT_RADIUS,
   POWERUP_RADIUS,
   GIANT_SCALE,
+  KICK_CHARGE_FULL_MS,
 } from '/shared/constants.js';
 
 const COLORS = {
@@ -29,6 +30,15 @@ const PU_GLYPH = { speed: 'S', mega: 'K', freeze: 'F', giant: 'G' };
 const BUFFER_MAX = 30;
 const KICK_FLASH_MS = 240;
 
+// Viewport: stadiums up to this size render 1:1 (no camera). Bigger stadiums
+// get a scrolling camera that follows YOUR disc (spectators follow the ball),
+// plus a minimap. Purely client-side — every player has their own view.
+const VIEW_W = 1200;
+const VIEW_H = 600;
+const CAM_LERP = 0.12; // per-frame smoothing toward the camera target
+
+const clampv = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
+
 export class Renderer {
   constructor(canvas) {
     this.canvas = canvas;
@@ -42,6 +52,14 @@ export class Renderer {
     this.kickoffTeam = null; // team taking the kickoff (post-goal); null otherwise
     this.kickFlashById = new Map(); // discId -> performance.now()
     this.powerup = null; // { type, x, y } orb on the pitch (powerups mode)
+    this.handlerId = null; // disc in close control of the ball (possession ring)
+    this.chargeStart = null; // performance.now() when we began charging a kick
+    this.cam = null; // {x,y} viewport origin in world coords (big stadiums only)
+  }
+
+  // main.js calls this on kick key down (timestamp) / up (null)
+  setKickCharge(startTime) {
+    this.chargeStart = startTime;
   }
 
   setPhase(state, kickoffTeam) {
@@ -56,9 +74,42 @@ export class Renderer {
     this.kickFlashById.clear();
     this.nameByDisc.clear();
     for (const p of init.players || []) this.nameByDisc.set(p.discId, p.name);
-    // resize canvas to stadium
-    this.canvas.width = init.stadium.width;
-    this.canvas.height = init.stadium.height;
+    // canvas = viewport; small stadiums render 1:1, big ones scroll
+    this.canvas.width = Math.min(init.stadium.width, VIEW_W);
+    this.canvas.height = Math.min(init.stadium.height, VIEW_H);
+    this.cam = null; // snaps to the target on the first frame
+    this._buildGrass();
+  }
+
+  // Pre-render the pitch texture once per stadium: alternating mowing stripes
+  // with a subtle blade speckle. Drawn as one image each frame — cheap.
+  _buildGrass() {
+    const W = this.init.stadium.width;
+    const H = this.init.stadium.height;
+    const g = document.createElement('canvas');
+    g.width = W;
+    g.height = H;
+    const gx = g.getContext('2d');
+    const stripe = 80; // mowing band width (vertical bands, like a real pitch)
+    for (let x = 0, i = 0; x < W; x += stripe, i++) {
+      gx.fillStyle = i % 2 === 0 ? '#3e6f3e' : '#356335';
+      gx.fillRect(x, 0, stripe, H);
+    }
+    // grass blades: tiny vertical flecks, a mix of lighter and darker greens
+    const n = Math.floor((W * H) / 200);
+    for (let i = 0; i < n; i++) {
+      const x = Math.random() * W;
+      const y = Math.random() * H;
+      gx.fillStyle = Math.random() < 0.5 ? 'rgba(255,255,255,.045)' : 'rgba(0,0,0,.06)';
+      gx.fillRect(x, y, 1, 1.5 + Math.random() * 2);
+    }
+    // soft edge shading so the pitch reads as lit from the center
+    const vg = gx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.75);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(0,0,0,.18)');
+    gx.fillStyle = vg;
+    gx.fillRect(0, 0, W, H);
+    this.grass = g;
   }
 
   setSelfDisc(id) {
@@ -74,12 +125,14 @@ export class Renderer {
         stamina: d.stamina,
         exhausted: !!d.exhausted,
         sprinting: !!d.sprinting,
+        hd: d.hd, // facing (degrees) for the notch
         buffs: d.buffs || null,
       });
     }
     this.buffer.push({ recvTime: performance.now(), byId });
     if (this.buffer.length > BUFFER_MAX) this.buffer.shift();
     this.powerup = snap.powerup || null; // not interpolated — static while present
+    this.handlerId = snap.handler ?? null;
   }
 
   flashKick(discId) {
@@ -120,6 +173,7 @@ export class Renderer {
               : pb.stamina,
           exhausted: pb.exhausted,
           sprinting: pb.sprinting,
+          hd: pb.hd, // not interpolated — 30 Hz is smooth enough for a notch
           buffs: pb.buffs,
         });
       } else out.set(id, pb);
@@ -132,39 +186,132 @@ export class Renderer {
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     if (!this.init) return;
 
+    const positions = this._interpolated(performance.now() - INTERP_DELAY_MS);
+    const camOn = this._updateCamera(positions);
+
+    ctx.save();
+    if (camOn) ctx.translate(-this.cam.x, -this.cam.y);
+
     this._drawField();
 
-    const positions = this._interpolated(performance.now() - INTERP_DELAY_MS);
-    if (!positions) return;
+    if (positions) {
+      // post-goal kickoff: show the scoring team's keep-out ring around the ball
+      if (this.phase === 'kickoff' && this.kickoffTeam) this._drawKeepOut(positions);
 
-    // post-goal kickoff: show the scoring team's keep-out ring around the ball
-    if (this.phase === 'kickoff' && this.kickoffTeam) this._drawKeepOut(positions);
+      // power-up orb sits under the discs so players visibly cover it on pickup
+      if (this.powerup) this._drawPowerup();
 
-    // power-up orb sits under the discs so players visibly cover it on pickup
-    if (this.powerup) this._drawPowerup();
+      // possession ring sits under the ball, in the handler's team color
+      if (this.handlerId != null) this._drawPossession(positions);
 
-    // posts first, then ball, then players (players on top)
-    const now = performance.now();
-    const order = { post: 0, ball: 1, player: 2 };
-    const ids = [...positions.keys()].sort(
-      (i, j) => (order[this.staticById.get(i)?.kind] ?? 1) - (order[this.staticById.get(j)?.kind] ?? 1)
-    );
-    for (const id of ids) {
-      const s = this.staticById.get(id);
-      const p = positions.get(id);
-      if (!s) continue;
-      this._drawDisc(p, s, id === this.selfDiscId, id, now);
+      // posts first, then ball, then players (players on top)
+      const now = performance.now();
+      const order = { post: 0, ball: 1, player: 2 };
+      const ids = [...positions.keys()].sort(
+        (i, j) => (order[this.staticById.get(i)?.kind] ?? 1) - (order[this.staticById.get(j)?.kind] ?? 1)
+      );
+      for (const id of ids) {
+        const s = this.staticById.get(id);
+        const p = positions.get(id);
+        if (!s) continue;
+        this._drawDisc(p, s, id === this.selfDiscId, id, now);
+      }
+      // names go on top of all discs so they're never overlapped
+      for (const id of ids) {
+        const s = this.staticById.get(id);
+        const p = positions.get(id);
+        if (s && s.kind === 'player') this._drawName(p, s, this.nameByDisc.get(id), id === this.selfDiscId);
+      }
+
+      // charge meter arc around our own disc while the kick key is held
+      this._drawCharge(positions, now);
     }
-    // names go on top of all discs so they're never overlapped
-    for (const id of ids) {
-      const s = this.staticById.get(id);
-      const p = positions.get(id);
-      if (s && s.kind === 'player') this._drawName(p, s, this.nameByDisc.get(id), id === this.selfDiscId);
+
+    ctx.restore();
+
+    // minimap only when there's more pitch than viewport
+    if (camOn && positions) this._drawMinimap(positions);
+  }
+
+  // Follow-cam for stadiums bigger than the viewport: center on our own disc
+  // (spectators / not-yet-spawned follow the ball), clamped to the pitch and
+  // smoothed. Returns whether the camera is active.
+  _updateCamera(positions) {
+    const W = this.init.stadium.width;
+    const H = this.init.stadium.height;
+    const vw = this.canvas.width;
+    const vh = this.canvas.height;
+    if (W <= vw && H <= vh) {
+      this.cam = null;
+      return false;
     }
+    let t = null;
+    if (positions) {
+      if (this.selfDiscId != null) t = positions.get(this.selfDiscId);
+      if (!t) {
+        for (const [id, s] of this.staticById) {
+          if (s.kind === 'ball') {
+            t = positions.get(id);
+            break;
+          }
+        }
+      }
+    }
+    const tx = clampv((t ? t.x : W / 2) - vw / 2, 0, W - vw);
+    const ty = clampv((t ? t.y : H / 2) - vh / 2, 0, H - vh);
+    if (!this.cam) {
+      this.cam = { x: tx, y: ty };
+    } else {
+      this.cam.x += (tx - this.cam.x) * CAM_LERP;
+      this.cam.y += (ty - this.cam.y) * CAM_LERP;
+    }
+    return true;
+  }
+
+  _drawMinimap(positions) {
+    const { ctx } = this;
+    const W = this.init.stadium.width;
+    const H = this.init.stadium.height;
+    const mw = 150;
+    const mh = Math.round((mw * H) / W);
+    const mx = this.canvas.width - mw - 12;
+    const my = this.canvas.height - mh - 12;
+    const s = mw / W;
+    ctx.save();
+    ctx.fillStyle = 'rgba(8,20,12,.72)';
+    ctx.fillRect(mx, my, mw, mh);
+    ctx.strokeStyle = 'rgba(255,255,255,.35)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(mx + 0.5, my + 0.5, mw - 1, mh - 1);
+    // current viewport
+    if (this.cam) {
+      ctx.strokeStyle = 'rgba(255,255,255,.6)';
+      ctx.strokeRect(mx + this.cam.x * s, my + this.cam.y * s, this.canvas.width * s, this.canvas.height * s);
+    }
+    for (const [id, p] of positions) {
+      const st = this.staticById.get(id);
+      if (!st || st.kind === 'post') continue;
+      ctx.beginPath();
+      if (st.kind === 'ball') {
+        ctx.fillStyle = '#ffffff';
+        ctx.arc(mx + p.x * s, my + p.y * s, 2.5, 0, Math.PI * 2);
+      } else {
+        ctx.fillStyle = st.team === 'blue' ? COLORS.blue : COLORS.red;
+        ctx.arc(mx + p.x * s, my + p.y * s, id === this.selfDiscId ? 3 : 2, 0, Math.PI * 2);
+      }
+      ctx.fill();
+      if (id === this.selfDiscId) {
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
   }
 
   _drawField() {
     const { ctx, init } = this;
+    if (this.grass) ctx.drawImage(this.grass, 0, 0);
     ctx.strokeStyle = COLORS.line;
     ctx.lineWidth = 3;
     for (const seg of init.stadium.segments) {
@@ -218,6 +365,16 @@ export class Renderer {
       ctx.arc(p.x, p.y, radius + 2, 0, Math.PI * 2);
       ctx.lineWidth = 2;
       ctx.strokeStyle = `rgba(255,245,170,${0.85 * kickFlash})`;
+      ctx.stroke();
+    }
+    if (s.kind === 'player' && typeof p.hd === 'number') {
+      // facing notch — shows which way this player's kicks/momentum point
+      const a = (p.hd * Math.PI) / 180;
+      ctx.beginPath();
+      ctx.moveTo(p.x + Math.cos(a) * radius * 0.35, p.y + Math.sin(a) * radius * 0.35);
+      ctx.lineTo(p.x + Math.cos(a) * radius * 0.95, p.y + Math.sin(a) * radius * 0.95);
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(0,0,0,.4)';
       ctx.stroke();
     }
     if (s.kind === 'player' && Array.isArray(p.buffs) && p.buffs.length) {
@@ -309,6 +466,51 @@ export class Renderer {
     ctx.strokeStyle = lockedTeam === 'blue' ? 'rgba(74,120,225,.8)' : 'rgba(225,90,74,.8)';
     ctx.beginPath();
     ctx.arc(b.x, b.y, KICKOFF_KEEPOUT_RADIUS, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // soft ring around the ball in the handler's team color — shows who has
+  // close control without covering the ball itself
+  _drawPossession(positions) {
+    let ballId = null;
+    for (const [id, s] of this.staticById) {
+      if (s.kind === 'ball') {
+        ballId = id;
+        break;
+      }
+    }
+    const b = ballId != null ? positions.get(ballId) : null;
+    const handler = this.staticById.get(this.handlerId);
+    if (!b || !handler) return;
+    const ballR = this.staticById.get(ballId)?.radius ?? 10;
+    const { ctx } = this;
+    ctx.save();
+    ctx.setLineDash([4, 4]);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle =
+      handler.team === 'blue' ? 'rgba(74,120,225,.75)' : 'rgba(225,90,74,.75)';
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, ballR + 5, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // arc filling clockwise from 12 o'clock while charging; shifts yellow -> red
+  _drawCharge(positions, now) {
+    if (this.chargeStart == null || this.selfDiscId == null) return;
+    const p = positions.get(this.selfDiscId);
+    const s = this.staticById.get(this.selfDiscId);
+    if (!p || !s) return;
+    const t = Math.min(1, (now - this.chargeStart) / KICK_CHARGE_FULL_MS);
+    const r = this._effRadius(p, s) + 6;
+    const { ctx } = this;
+    ctx.save();
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = `hsl(${55 - 50 * t} 85% ${62 - 8 * t}%)`;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, -Math.PI / 2, -Math.PI / 2 + t * Math.PI * 2);
     ctx.stroke();
     ctx.restore();
   }

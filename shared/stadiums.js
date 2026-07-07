@@ -296,11 +296,79 @@ function colossusPitch() {
   };
 }
 
+// Titan pitch: a properly huge field (2.5x Classic). Far bigger than the
+// client viewport — players see a scrolling camera view + minimap. Long runs,
+// real passing lanes, stamina management matters.
+function titanPitch() {
+  const W = 3000,
+    H = 1500;
+  const L = 80,
+    R = 2920,
+    T = 80,
+    B = 1420; // field rectangle
+  const gT = 600,
+    gB = 900; // goal mouth (centered, height 300)
+  const netL = 25,
+    netR = 2975; // back of nets
+  const cY = H / 2;
+
+  return {
+    name: 'Titan',
+    width: W,
+    height: H,
+    spawnRed: [
+      [750, cY],
+      [750, 500],
+      [750, 1000],
+      [1120, 620],
+      [1120, 880],
+      [500, cY],
+    ],
+    spawnBlue: [
+      [2250, cY],
+      [2250, 500],
+      [2250, 1000],
+      [1880, 620],
+      [1880, 880],
+      [2500, cY],
+    ],
+    ballSpawn: [1500, cY],
+    segments: [
+      // perimeter
+      { ax: L, ay: T, bx: R, by: T, bCoeff: WALL_BCOEFF }, // top
+      { ax: L, ay: B, bx: R, by: B, bCoeff: WALL_BCOEFF }, // bottom
+      { ax: L, ay: T, bx: L, by: gT, bCoeff: WALL_BCOEFF }, // left upper
+      { ax: L, ay: gB, bx: L, by: B, bCoeff: WALL_BCOEFF }, // left lower
+      { ax: R, ay: T, bx: R, by: gT, bCoeff: WALL_BCOEFF }, // right upper
+      { ax: R, ay: gB, bx: R, by: B, bCoeff: WALL_BCOEFF }, // right lower
+      // left net pocket
+      { ax: netL, ay: gT, bx: netL, by: gB, bCoeff: NET },
+      { ax: netL, ay: gT, bx: L, by: gT, bCoeff: NET },
+      { ax: netL, ay: gB, bx: L, by: gB, bCoeff: NET },
+      // right net pocket
+      { ax: netR, ay: gT, bx: netR, by: gB, bCoeff: NET },
+      { ax: netR, ay: gT, bx: R, by: gT, bCoeff: NET },
+      { ax: netR, ay: gB, bx: R, by: gB, bCoeff: NET },
+    ],
+    posts: [
+      { x: L, y: gT, radius: 10 },
+      { x: L, y: gB, radius: 10 },
+      { x: R, y: gT, radius: 10 },
+      { x: R, y: gB, radius: 10 },
+    ],
+    goals: [
+      { scorer: 'blue', side: 'left', x: L - 2, yTop: gT, yBottom: gB },
+      { scorer: 'red', side: 'right', x: R + 2, yTop: gT, yBottom: gB },
+    ],
+  };
+}
+
 export const STADIUMS = {
   classic: classicPitch(),
   pillars: pillarsPitch(),
   diamond: diamondPitch(),
   colossus: colossusPitch(),
+  titan: titanPitch(),
 };
 
 export function getStadium(key = 'classic') {

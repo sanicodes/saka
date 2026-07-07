@@ -125,6 +125,8 @@ function leaveRoom() {
   roomData = null;
   renderer.init = null;
   renderer.buffer = [];
+  renderer.setKickCharge(null);
+  chargeWasDown = false;
   ui.setWinner('lobby'); // clear the result overlay
   ui.show('lobby');
 }
@@ -222,6 +224,9 @@ const TRACKED = new Set([
 ]);
 
 let lastSent = '';
+let chargeWasDown = false; // drives the local charge-meter arc (C key / right mouse)
+let mouseKick = false; // left mouse button — same as Space
+let mousePower = false; // right mouse button — same as C (hold to charge)
 function buildInput() {
   const down = (list) => list.some((k) => keys[k]);
   return {
@@ -230,13 +235,18 @@ function buildInput() {
     l: down(MOVE.l),
     r: down(MOVE.r),
     run: RUN_KEYS.some((k) => keys[k]),
-    kick: KICK_KEYS.some((k) => keys[k]),
-    pkick: POWER_KICK_KEYS.some((k) => keys[k]),
+    kick: down(KICK_KEYS) || mouseKick,
+    pkick: down(POWER_KICK_KEYS) || mousePower,
   };
 }
 function sendInputIfChanged() {
   if (!inRoom) return;
   const input = buildInput();
+  // charge meter is purely visual — the server counts the real charge time
+  if (input.pkick !== chargeWasDown) {
+    chargeWasDown = input.pkick;
+    renderer.setKickCharge(input.pkick ? performance.now() : null);
+  }
   const sig = `${+input.u}${+input.d}${+input.l}${+input.r}${+input.run}${+input.kick}${+input.pkick}`;
   if (sig !== lastSent) {
     lastSent = sig;
@@ -259,8 +269,32 @@ addEventListener('keyup', (e) => {
 });
 addEventListener('blur', () => {
   for (const k of Object.keys(keys)) keys[k] = false;
+  mouseKick = false;
+  mousePower = false;
   sendInputIfChanged();
 });
+
+// ---------------------------------------------------------------- mouse kicks
+// Left click = kick (Space), right click = charged kick (hold like C, release
+// to shoot). Active only on the match screen, and never over UI controls.
+const gameScreen = $('game');
+const overUi = (e) => e.target.closest('button, input, a, select');
+addEventListener('mousedown', (e) => {
+  if (!inRoom || gameScreen.classList.contains('hidden') || overUi(e)) return;
+  if (e.button === 0) mouseKick = true;
+  else if (e.button === 2) mousePower = true;
+  else return;
+  e.preventDefault();
+  sendInputIfChanged();
+});
+addEventListener('mouseup', (e) => {
+  if (e.button === 0) mouseKick = false;
+  else if (e.button === 2) mousePower = false;
+  else return;
+  sendInputIfChanged();
+});
+// right-click charging must not pop the context menu mid-match
+gameScreen.addEventListener('contextmenu', (e) => e.preventDefault());
 
 // ---------------------------------------------------------------- render loop
 function frame() {

@@ -12,6 +12,9 @@ import {
   applyMoveInput,
   resetPlayerStamina,
   tryKick,
+  applyBallHandling,
+  applyBallSpin,
+  handleGap,
 } from '../shared/factory.js';
 import { clamp } from '../shared/physics.js';
 import {
@@ -29,6 +32,9 @@ import {
   STAMINA_MAX,
   KICK_STRENGTH,
   POWER_KICK_STRENGTH,
+  KICK_CHARGE_FULL_MS,
+  HANDLE_RANGE,
+  HANDLE_KICK_COOLDOWN_TICKS,
   PLAYER_RADIUS,
   POWERUP_TYPES,
   POWERUP_RADIUS,
@@ -77,6 +83,7 @@ export class Room {
 
     this.score = { red: 0, blue: 0 };
     this.state = 'lobby';
+    this.handlerDiscId = null; // disc currently in close control of the ball
     this.stateTicks = 0;
     this.elapsedMs = 0;
     this.tick = 0;
@@ -141,6 +148,7 @@ export class Room {
       team: 'spec', // default: spectator — players explicitly pick a side
       input: { u: false, d: false, l: false, r: false, run: false },
       kickHeld: false,
+      chargeTicks: 0, // how long the kick key has been held (charged kick)
       pendingKick: false,
       powerHeld: false,
       pendingPower: false,
@@ -171,30 +179,29 @@ export class Room {
     if (!p) return;
     p.input = { u: !!input.u, d: !!input.d, l: !!input.l, r: !!input.r, run: !!input.run };
     const kick = !!input.kick;
-    if (kick && !p.kickHeld) p.pendingKick = true; // rising edge
+    if (kick && !p.kickHeld) p.pendingKick = true; // rising edge — instant kick
     p.kickHeld = kick;
     const power = !!input.pkick;
-    if (power && !p.powerHeld) p.pendingPower = true; // rising edge
+    if (!power && p.powerHeld) p.pendingPower = true; // falling edge — release fires the charged kick
     p.powerHeld = power;
   }
 
   setTeam(socketId, team) {
     const p = this.players.get(socketId);
     if (!p || !['red', 'blue', 'spec'].includes(team)) return;
+    // teams are locked once a match is under way — pick sides in the lobby
+    if (this.state !== 'lobby') return;
     p.team = team;
     if (team === 'spec') p.disc = null;
     else this._placePlayer(p);
-    if (this.state === 'kickoff') this._applyKickoffMasks(); // keep the lock consistent
-    if (this._endIfTeamForfeit()) return;
     this.sendRoom();
-    if (this._isLive()) this.sendInit();
   }
 
-  // owner-only, lobby-only: randomly re-deal the current participants (everyone
-  // already on red/blue) into two balanced teams. Spectators are left alone.
+  // owner-only, lobby-only: randomly re-deal EVERYONE in the room — including
+  // spectators — into two balanced teams.
   shuffleTeams(socketId) {
     if (!this.isOwner(socketId) || this.state !== 'lobby') return;
-    const pool = [...this.players.values()].filter((p) => p.team === 'red' || p.team === 'blue');
+    const pool = [...this.players.values()];
     for (let i = pool.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1)); // Fisher-Yates
       [pool[i], pool[j]] = [pool[j], pool[i]];
@@ -221,6 +228,7 @@ export class Room {
     player.disc.y = y;
     player.disc.vx = 0;
     player.disc.vy = 0;
+    player.disc.heading = team === 'blue' ? Math.PI : 0; // face the opponent's goal
     resetPlayerStamina(player.disc);
   }
 
@@ -316,6 +324,7 @@ export class Room {
       const frozen = (buffs.frozen ?? 0) > 0;
       const mods = { frozen, accelMul: (buffs.speed ?? 0) > 0 ? SPEED_BUFF_MULT : 1 };
       applyMoveInput(p.disc, { ...p.input, kick: p.kickHeld || p.powerHeld }, mods);
+      if (p.powerHeld) p.chargeTicks++;
       if ((p.pendingKick || p.pendingPower) && !frozen) {
         // kicks land during play, and during a kickoff only for the team that
         // is allowed to take it (the scoring team is locked out until live)
@@ -323,16 +332,30 @@ export class Room {
           this.state === 'play' ||
           (this.state === 'kickoff' && p.team !== this.kickoffLockTeam);
         if (canKick) {
-          let strength = p.pendingPower ? POWER_KICK_STRENGTH : KICK_STRENGTH;
+          let strength;
+          if (p.pendingPower) {
+            // charged kick (C released): tap = base, full hold = power strength
+            const t = clamp(p.chargeTicks / msToTicks(KICK_CHARGE_FULL_MS), 0, 1);
+            strength = KICK_STRENGTH + (POWER_KICK_STRENGTH - KICK_STRENGTH) * t;
+          } else {
+            strength = KICK_STRENGTH; // instant kick on press
+          }
           if ((buffs.mega ?? 0) > 0) strength *= MEGA_KICK_MULT;
           this.broadcastKick(p.disc.id);
-          tryKick(p.disc, this.ball, true, strength);
+          if (tryKick(p.disc, this.ball, true, strength)) {
+            // a fresh kick suppresses the kicker's close control briefly so
+            // their own handling doesn't drag the shot back
+            p.disc.handleCooldown = HANDLE_KICK_COOLDOWN_TICKS;
+          }
         }
       }
+      if (p.pendingPower) p.chargeTicks = 0;
       p.pendingKick = false;
       p.pendingPower = false;
     }
 
+    this._updateBallHandling();
+    applyBallSpin(this.ball);
     stepWorld(this.discs, this.stadium.segments, SOLVER_PASSES);
     this._containDiscs();
     this._tickBuffs();
@@ -435,6 +458,41 @@ export class Room {
     return false;
   }
 
+  // ---------------------------------------------------------------- ball handling
+  // Pick the single player in close control this tick (nearest eligible within
+  // HANDLE_RANGE) and apply trap + carry physics. A ball with players from both
+  // teams in range is contested — nobody gets the pull, collisions decide.
+  _updateBallHandling() {
+    this.handlerDiscId = null;
+    // post-kick cooldowns tick down in every live phase
+    for (const p of this.players.values()) {
+      const d = p.disc;
+      if (d && d.handleCooldown > 0) d.handleCooldown--;
+    }
+    if (this.state !== 'play') return;
+    let best = null;
+    let bestGap = Infinity;
+    const teams = new Set();
+    for (const p of this.players.values()) {
+      if (p.team === 'spec' || !p.disc) continue;
+      const d = p.disc;
+      // sprinting sacrifices control (the ball runs loose ahead), and a fresh
+      // kick or freeze suspends it
+      if (d.handleCooldown > 0 || d.isSprinting) continue;
+      if ((d.buffs?.frozen ?? 0) > 0) continue;
+      const gap = handleGap(d, this.ball);
+      if (gap > HANDLE_RANGE) continue;
+      teams.add(p.team);
+      if (gap < bestGap) {
+        bestGap = gap;
+        best = d;
+      }
+    }
+    if (!best || teams.size > 1) return;
+    applyBallHandling(best, this.ball);
+    this.handlerDiscId = best.id;
+  }
+
   // ---------------------------------------------------------------- power-ups
   // count down every active buff/debuff; restore radius when 'giant' expires
   _tickBuffs() {
@@ -534,6 +592,8 @@ export class Room {
     this.ball.y = by;
     this.ball.vx = 0;
     this.ball.vy = 0;
+    this.ball.spin = 0;
+    this.handlerDiscId = null;
   }
 
   _enterKickoff() {
@@ -658,10 +718,12 @@ export class Room {
           d.kind === 'player' ? Math.round(((d.stamina ?? STAMINA_MAX) / STAMINA_MAX) * 100) : null,
         exhausted: d.kind === 'player' ? !!d.exhausted : false,
         sprinting: d.kind === 'player' ? !!d.isSprinting : false,
+        hd: d.kind === 'player' ? Math.round(((d.heading ?? 0) * 180) / Math.PI) : null, // facing, degrees
         buffs:
           d.kind === 'player' && d.buffs && Object.keys(d.buffs).length ? Object.keys(d.buffs) : null,
       })),
       powerup: this.powerup ? { type: this.powerup.type, x: Math.round(this.powerup.x), y: Math.round(this.powerup.y) } : null,
+      handler: this.handlerDiscId ?? null, // disc in close control (possession ring)
       score: [this.score.red, this.score.blue],
       state: this.state,
       timeLeftMs: this.timeLeftMs(),

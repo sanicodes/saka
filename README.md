@@ -57,6 +57,39 @@ client/   index.html  main.js  render.js  ui.js  sandbox.html
 ```
 ## Controls
 
-Move `WASD` / arrows · Sprint `Shift` · Kick `Space` / `X` (edge-triggered — release
-and press again to kick). `R` resets the sandbox.
+Move `WASD` / arrows · Sprint `Shift` · Kick `Space` / `X` **or left click**
+(instant, on press) · Charged kick `C` **or right click** — **hold to charge**,
+release to shoot (tap = normal kick, full ~0.9 s hold = power strength; a meter
+fills around your disc). `R` resets the sandbox.
+
+## Aiming, movement & ball handling
+
+- **Facing = aim** — players have a facing (the dark notch on the disc). Kicks fire
+  **along your facing** when the ball is in front of you, so you steer shots by
+  turning. Standing still, tapping a direction spins your facing almost instantly
+  without moving you — that's your aiming mechanism. A ball behind you is cleared
+  along the ball line instead (no through-body kicks).
+- **Momentum & turn radius** — input steers the facing, thrust goes along it:
+  standing you spin instantly, at sprint speed a reversal carves an arc. Releasing
+  all keys brakes you to a stop in ~0.3 s.
+- **Dribble / close control** — the nearest player within reach holds the ball on a
+  carry ring (team-colored possession ring). The ball **swings around your disc to
+  sit in front of your facing**, so where you look is where the ball — and your next
+  kick — goes. Sprinting sacrifices control; kicks, bumps, and tackles overpower the
+  carry. Both teams in reach = contested, ball stays loose.
+- **First touch** — an incoming ball cushions against a player in control instead of
+  ricocheting off.
+- **Curve** — moving sideways across the ball as you kick puts spin on it, bending
+  the shot in flight. A controlled touch kills the spin.
+
+Tunables in `shared/constants.js` (`TURN_*`, `HANDLE_*`, `KICK_AIM_CONE`,
+`TRAP_BLEND`, `KICK_CHARGE_FULL_MS`, `CURVE_*`).
+
+## Camera & big stadiums
+
+The canvas is a fixed 1200×600 viewport. Stadiums that fit render 1:1 exactly as
+before; bigger ones (Colossus, and the huge **Titan** at 3000×1500) get a smoothed
+per-player camera that follows **your own disc** (spectators follow the ball) plus a
+minimap in the corner showing every disc and your current view. All client-side —
+each player sees their own view of the same server simulation.
 # saka
