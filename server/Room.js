@@ -88,6 +88,9 @@ export class Room {
     this.elapsedMs = 0;
     this.tick = 0;
     this.lastScorer = null;
+    this.lastGoal = null; // commentary detail for the latest goal: { team, scorer, assist, ownGoal, final }
+    this.lastTouch = null; // last player to touch the ball { id, name, team } — goal attribution
+    this.prevTouch = null; // the distinct toucher before that — assist detection
     this.kickoffLockTeam = null; // team barred from the ball during a kickoff (the scorers)
 
     this.loop = null;
@@ -353,6 +356,7 @@ export class Room {
           if ((buffs.mega ?? 0) > 0) strength *= MEGA_KICK_MULT;
           this.broadcastKick(p.disc.id);
           if (tryKick(p.disc, this.ball, true, strength)) {
+            this._recordTouch(p);
             // a fresh kick suppresses the kicker's close control briefly so
             // their own handling doesn't drag the shot back
             p.disc.handleCooldown = HANDLE_KICK_COOLDOWN_TICKS;
@@ -368,6 +372,7 @@ export class Room {
     applyBallSpin(this.ball);
     stepWorld(this.discs, this.stadium.segments, SOLVER_PASSES);
     this._containDiscs();
+    this._trackBallTouch();
     this._tickBuffs();
     this._updatePowerups();
 
@@ -574,6 +579,32 @@ export class Room {
     this.powerupTimer = msToTicks(POWERUP_FIRST_SPAWN_MS);
   }
 
+  // ---------------------------------------------------------------- ball touches
+  // Remember who touched the ball last (and who before them) so goals can be
+  // attributed for commentary: connected kicks count via tryKick, dribbles and
+  // deflections via contact proximity after the physics step.
+  _recordTouch(p) {
+    if (this.lastTouch?.id === p.id) return;
+    this.prevTouch = this.lastTouch;
+    this.lastTouch = { id: p.id, name: p.name, team: p.team };
+  }
+
+  _trackBallTouch() {
+    if (this.state !== 'play' && this.state !== 'kickoff') return;
+    const b = this.ball;
+    let best = null;
+    let bestGap = Infinity;
+    for (const p of this.players.values()) {
+      if (p.team === 'spec' || !p.disc) continue;
+      const gap = Math.hypot(b.x - p.disc.x, b.y - p.disc.y) - p.disc.radius - b.radius;
+      if (gap <= 1.5 && gap < bestGap) {
+        bestGap = gap;
+        best = p;
+      }
+    }
+    if (best) this._recordTouch(best);
+  }
+
   _checkGoal() {
     const b = this.ball;
     for (const g of this.stadium.goals) {
@@ -583,7 +614,14 @@ export class Room {
         this.score[g.scorer]++;
         this.lastScorer = g.scorer;
         const lim = this.settings.scoreLimit;
-        if (lim > 0 && (this.score.red >= lim || this.score.blue >= lim)) {
+        const final = lim > 0 && (this.score.red >= lim || this.score.blue >= lim);
+        const touch = this.lastTouch;
+        const ownGoal = !!touch && touch.team !== g.scorer;
+        // assist = previous distinct toucher, same team as the scorer (never on own goals)
+        const assist =
+          !ownGoal && touch && this.prevTouch?.team === g.scorer ? this.prevTouch.name : null;
+        this.lastGoal = { team: g.scorer, scorer: touch?.name ?? null, assist, ownGoal, final };
+        if (final) {
           this._endMatch();
         } else {
           this._enterGoal();
@@ -609,6 +647,9 @@ export class Room {
   _enterKickoff() {
     this._resetPositions();
     this._resetPowerState();
+    this.lastGoal = null; // the celebration is over — next state events carry no goal
+    this.lastTouch = null;
+    this.prevTouch = null;
     this.state = 'kickoff';
     // after a goal, the scorers are locked out of the ball until the conceding
     // team takes the kickoff; the very first kickoff of a match has no lock
@@ -706,6 +747,9 @@ export class Room {
       state: this.state,
       score: this.score,
       lastScorer: this.lastScorer,
+      goal: this.lastGoal, // commentary detail (scorer/assist/own-goal); null outside goal/ended
+      // per-event seed: every client derives the same commentary variant from it
+      seed: (Math.random() * 0x100000000) >>> 0,
       // team taking the kickoff = whoever the scorers are NOT (null on first kickoff)
       kickoffTeam: this.kickoffLockTeam ? (this.kickoffLockTeam === 'red' ? 'blue' : 'red') : null,
       timeLeftMs: this.timeLeftMs(),

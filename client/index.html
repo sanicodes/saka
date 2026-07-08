@@ -94,6 +94,9 @@
   #scoreboard .blue { color:var(--blue); }
   #clock { font-variant-numeric: tabular-nums; opacity:.85; font-size:18px; }
   #banner { height:24px; font-size:16px; opacity:.9; }
+  #commentary { min-height:20px; font-size:14px; font-style:italic; color:#cfe3cf;
+    opacity:0; transition:opacity .3s; }
+  #commentary.show { opacity:.85; }
   .stage { position:relative; line-height:0; }
   canvas { background:var(--pitch); border-radius:8px; box-shadow:0 6px 22px rgba(0,0,0,.5); }
   #winner { position:absolute; inset:0; display:flex; flex-direction:column; gap:6px;
@@ -106,6 +109,7 @@
   .controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:center; }
   .controls .red { background:var(--red); }
   .controls .blue { background:var(--blue); }
+  .controls button.off { opacity:.4; }
   .hint { font-size:13px; opacity:.6; }
   code { background:#1f1f1f; padding:1px 5px; border-radius:3px; }
 </style>
@@ -189,6 +193,7 @@
       <span id="clock">5:00</span>
     </div>
     <div id="banner"></div>
+    <div id="commentary"></div>
     <div class="arena">
       <div class="stage">
         <canvas id="c" width="1200" height="600"></canvas>
@@ -216,6 +221,7 @@
       <button data-team="spec">Spectate</button>
       <button id="rematchBtn" class="primary hidden">Play again</button>
       <span id="endNote" class="hint hidden"></span>
+      <button id="commsBtn" title="Toggle commentary">🎙️</button>
       <button id="muteBtn" title="Toggle sound">🔊</button>
       <button id="leaveBtn">Leave</button>
     </div>

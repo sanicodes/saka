@@ -50,13 +50,18 @@ starts the match. `PORT` env var overrides the port.
 - **Client** (`client/`) — canvas renderer with entity interpolation (renders ~100 ms
   in the past), stamina feedback, input capture (sent only on change), lobby UI,
   scoreboard, team picker.
+- **Spoken commentary** (`client/commentary.js`) — a Web Speech API commentator calls
+  kickoffs, goals (scorer, assist, own goals — the server attributes them via
+  last-touch tracking), and full time, with each line also flashed as a text caption
+  under the banner. Toggle with 🎙️ in the match controls; the master 🔊 mute silences
+  it too. No audio assets, same philosophy as the synthesized sfx.
 
 ## Layout
 
 ```
 shared/   constants.js  physics.js  factory.js  stadiums.js   # runs on both sides
 server/   index.js (bootstrap)  net.js (sockets+registry)  Room.js (game loop)
-client/   index.html  main.js  render.js  ui.js  sandbox.html
+client/   index.html  main.js  render.js  ui.js  sfx.js  commentary.js  sandbox.html
 ```
 ## Controls
 

@@ -5,6 +5,7 @@
 import { Renderer } from '/render.js';
 import { ui } from '/ui.js';
 import { sfx } from '/sfx.js';
+import { commentary } from '/commentary.js';
 
 /* global io */
 const socket = io();
@@ -175,6 +176,7 @@ function leaveRoom() {
   renderer.buffer = [];
   renderer.setKickCharge(null);
   chargeWasDown = false;
+  lastPhase = null; // don't carry phase transitions (sfx/commentary) across rooms
   ui.setWinner('lobby'); // clear the result overlay
   ui.show('lobby');
 }
@@ -192,6 +194,15 @@ muteBtn.onclick = () => {
   syncMute();
 };
 syncMute();
+
+// commentary toggle (🎙️) — independent of the master mute, which silences it too
+const commsBtn = $('commsBtn');
+const syncComms = () => commsBtn.classList.toggle('off', !commentary.enabled);
+commsBtn.onclick = () => {
+  commentary.toggle();
+  syncComms();
+};
+syncComms();
 
 // ---------------------------------------------------------------- room actions
 $('startBtn').onclick = () => socket.emit('room:start');
@@ -243,11 +254,20 @@ socket.on('state', (s) => {
   renderer.setPhase(s.state, s.kickoffTeam);
   ui.setWinner(s.state, s.score);
   ui.setEndControls(s.state, isOwner());
-  // sound only on the transition INTO a phase — `state` can resend the same one
+  // sound/commentary only on the transition INTO a phase — `state` can resend the same one
   if (s.state !== lastPhase) {
-    if (s.state === 'goal') sfx.goal();
-    else if (s.state === 'kickoff') sfx.whistle();
-    else if (s.state === 'ended') sfx.fullTime();
+    if (s.state === 'goal') {
+      sfx.goal();
+      commentary.goal(s.goal, s.score, s.seed);
+    } else if (s.state === 'kickoff') {
+      sfx.whistle();
+      // no kickoffTeam = the opening kickoff of a match
+      if (s.kickoffTeam) commentary.kickoff(s.kickoffTeam, s.seed);
+      else commentary.matchStart(s.seed);
+    } else if (s.state === 'ended') {
+      sfx.fullTime();
+      commentary.fullTime(s.score, s.goal, s.seed);
+    }
     lastPhase = s.state;
   }
   route(s.state);
